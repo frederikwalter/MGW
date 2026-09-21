@@ -1,6 +1,12 @@
 
 # Data files
 data/
+experiments/*.npy
+experiments/*.pt
 
 # Mac OS files
 .DS_Store
+
+# Python cache files
+mgw/__pycache__/
+
