@@ -16,3 +16,10 @@ class GeoConfig:
 class GWConfig:
     # No parameters needed here for vanilla POT's GW, left for extension
     pass
+
+import os
+from pathlib import Path
+
+# Root of the data directory. Set MGW_DATA_DIR to point at data stored elsewhere
+# on a given machine; defaults to <repo>/data.
+DATA_DIR = Path(os.environ.get("MGW_DATA_DIR", Path(__file__).resolve().parent.parent / "data")).expanduser()
