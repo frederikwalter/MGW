@@ -1,6 +1,7 @@
 
 # Data files
 data/
+.mgw_data_dir
 experiments/*.npy
 experiments/*.pt
 
