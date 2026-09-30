@@ -102,9 +102,15 @@ def solve_gw(C1, C2, a=None, b=None,
 def solve_gw_ott(C1, C2, a=None, b=None,
                         epsilon=1e-2, inner_tol=1e-7, outer_tol=1e-7,
                          tau_a=1, tau_b=1,
-                        inner_maxit=4000, outer_maxit=1000, verbose=True, 
-                         jit=True):
-    
+                        inner_maxit=4000, outer_maxit=1000, verbose=True,
+                         jit=True, M=None, fused_penalty=1.0):
+    """Entropic (F)GW with OTT.
+
+    With ``M`` (n1×n2 cross cost) the problem is fused: OTT adds
+    ``fused_penalty * M`` to every linearization, i.e. it optimizes
+    ``0.5 * GW(P) + fused_penalty * <M, P>``.  ``M=None`` is pure GW.
+    """
+
     n1 = C1.shape[0]
     n2 = C2.shape[0]
     
@@ -121,8 +127,13 @@ def solve_gw_ott(C1, C2, a=None, b=None,
     geom_x = geometry.Geometry(cost_matrix=C1_j, epsilon=epsilon)
     geom_y = geometry.Geometry(cost_matrix=C2_j, epsilon=epsilon)
     
-    # Quadratic GW problem
-    prob = quadratic_problem.QuadraticProblem(geom_x, geom_y, a=a_j, b=b_j, tau_a=tau_a, tau_b=tau_b)
+    # Quadratic GW problem (fused if a cross cost M is given)
+    if M is None:
+        prob = quadratic_problem.QuadraticProblem(geom_x, geom_y, a=a_j, b=b_j, tau_a=tau_a, tau_b=tau_b)
+    else:
+        geom_xy = geometry.Geometry(cost_matrix=jnp.asarray(M, dtype=jnp.float32), epsilon=epsilon)
+        prob = quadratic_problem.QuadraticProblem(geom_x, geom_y, geom_xy=geom_xy, fused_penalty=float(fused_penalty),
+                                                  a=a_j, b=b_j, tau_a=tau_a, tau_b=tau_b)
     
     # Inner linear solver + outer GW solver
     lin = Sinkhorn(max_iterations=inner_maxit, threshold=inner_tol)
@@ -134,7 +145,7 @@ def solve_gw_ott(C1, C2, a=None, b=None,
     
     out = gw(prob)
     P = np.array(out.matrix)
-    
+
     '''
     # Diagnostics (POT’s explicit GW loss; optional)
     constC, hC1, hC2 = init_matrix(C1, C2, a, b, loss_fun="square_loss")

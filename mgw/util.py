@@ -138,7 +138,13 @@ def project_informative_features(
     print('Computing CCA Components')
     cca = CCA(n_components=n_comp, max_iter=1000, scale=False)
     cca.fit(X_std, Z_std)
-    
+
+    # canonical correlation per component, on the feeler pairs
+    U_fit, V_fit = X_std @ cca.x_weights_, Z_std @ cca.y_weights_
+    cca_corr = np.array([np.corrcoef(U_fit[:, k], V_fit[:, k])[0, 1] for k in range(n_comp)])
+    if verbose:
+        print("CCA canonical correlations:", np.round(cca_corr, 3))
+
     X_cca_full = X_scaler.transform(X_pca) @ cca.x_weights_
     Z_cca_full = Z_scaler.transform(Z_pca) @ cca.y_weights_
     
@@ -153,11 +159,13 @@ def project_informative_features(
         X_cca_full=X_cca_full,               # size n_X × CCA_comp
         Z_cca_full=Z_cca_full,               # size n_Z × CCA_comp
         cca=cca,
+        cca_corr=cca_corr,                   # size CCA_comp
         scalers=dict(X_scaler=X_scaler, Z_scaler=Z_scaler),
         meta=dict(
             idxZ_feeler=idxZ,
             PCA_comp=PCA_comp, CCA_comp=n_comp,
-            feeler_epsilon=feeler_epsilon
+            feeler_epsilon=feeler_epsilon,
+            cca_corr=cca_corr,
         )
     )
 
