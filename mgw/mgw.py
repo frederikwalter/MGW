@@ -241,6 +241,8 @@ def mgw_align_core(
         gw_params = dict(verbose=True, inner_maxit=3000, outer_maxit=3000,
                          inner_tol=1e-7,   outer_tol=1e-7,   epsilon=1e-4)
     if verbose: print(f"[mgw.core] solving GW with {gw_params}")
+    # Return torch's cached GPU blocks so JAX can use them for the GW solve
+    if torch.cuda.is_available(): torch.cuda.empty_cache()
     P = solve_gw_ott(C_M, C_N, **gw_params)
     if verbose: print(f"[mgw.core] coupling: shape={P.shape}, mass={P.sum():.6f}")
 
