@@ -96,6 +96,7 @@ def project_informative_features(
     else:
         xs_gw, Xpca_gw = xs, X_pca
         xt_gw, Zpca_gw = xt, Z_pca
+        idxX = np.arange(nX)
         idxZ = np.arange(nZ)
     
     # ----------------------------
@@ -148,13 +149,14 @@ def project_informative_features(
     return dict(
         xs=xs, xt=xt,
         X_pca=X_pca, Z_pca=Z_pca,
-        P_feeler=P,                          # on (X_all, Z_ds) shapes
+        P_feeler=P,                          # on (X_ds, Z_ds) shapes
         Z_bary_on_X=Z_bary_on_X,             # size n_X × PCA_comp
         X_cca_full=X_cca_full,               # size n_X × CCA_comp
         Z_cca_full=Z_cca_full,               # size n_Z × CCA_comp
         cca=cca,
         scalers=dict(X_scaler=X_scaler, Z_scaler=Z_scaler),
         meta=dict(
+            idxX_feeler=idxX,
             idxZ_feeler=idxZ,
             PCA_comp=PCA_comp, CCA_comp=n_comp,
             feeler_epsilon=feeler_epsilon
