@@ -244,16 +244,16 @@ def project_labels_via_P(P, labels_src, direction="A_to_B"):
     direction="B_to_A": P shape (n_A, n_B), project B->A
     Returns: pred_labels, confidence, posteriors (C x n_dest)
     """
-    P = P.toarray() if sp.issparse(P) else np.asarray(P, float)
+    P = P.toarray() if sp.issparse(P) else np.asarray(P)
     labels_src = np.asarray(labels_src)
 
     classes, inv = np.unique(labels_src, return_inverse=True)     # C classes
-    onehot = np.eye(len(classes))[inv]                            # (n_src, C)
+    onehot = np.eye(len(classes), dtype=P.dtype)[inv]             # (n_src, C)
 
     if direction == "A_to_B":
-        # column-normalize (each B point gets a distribution over A)
-        W = P / (P.sum(axis=0, keepdims=True) + 1e-12)           # (n_A, n_B)
-        post = onehot.T @ W                                       # (C, n_B)
+        # column-normalize (each B point gets a distribution over A); scaling after
+        # the product avoids an extra n_A x n_B copy of P
+        post = (onehot.T @ P) / (P.sum(axis=0) + 1e-12)          # (C, n_B)
     else:
         # row-normalize (each A point gets a distribution over B)
         W = P / (P.sum(axis=1, keepdims=True) + 1e-12)           # (n_A, n_B)
