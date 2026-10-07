@@ -212,10 +212,10 @@ def mgw_align_core(
         for k in rng.choice(dim_f_M, size=min(5, dim_f_M), replace=False):
             X_pred = plotting.predict_on_model(phi, xs)
             plotting.plot_fit_on_cloud(xs, ys_t[:,k].cpu().numpy(), X_pred[:,k],
-                                       title_true=f'ST feat{k} (true)', title_pred=f'φ(xs) feat{k} (pred)')
+                                       title_true=f'Slice A feat{k} (true)', title_pred=f'φ(xs) feat{k} (pred)')
             Z_pred = plotting.predict_on_model(psi, xs2)
             plotting.plot_fit_on_cloud(xs2, ys2_t[:,k].cpu().numpy(), Z_pred[:,k],
-                                       title_true=f'SM feat{k} (true)', title_pred=f'ψ(xs2) feat{k} (pred)')
+                                       title_true=f'Slice B feat{k} (true)', title_pred=f'ψ(xs2) feat{k} (pred)')
 
     if verbose: print("[mgw.core] pullback metrics & geodesics")
     G_M = geometry.pullback_metric_field(phi, torch.from_numpy(xs).to(device),  eps=geodesic_eps).cpu()
