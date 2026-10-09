@@ -1,10 +1,11 @@
-"""One-to-one human-mouse orthologs (Ensembl BioMart), keyed by gene symbol."""
+"""One-to-one human-mouse orthologs (Ensembl BioMart), keyed by gene symbol.
+
+The table ships with the package (mgw/resources/human_mouse_one2one.tsv, Ensembl release 116,
+built 2026-10-09 with build_one2one_table). Rebuild it with build_one2one_table() to update it.
+"""
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-
-from mgw.config import get_data_dir
 
 BIOMART_URL = "https://www.ensembl.org/biomart/martservice"
 _QUERY = (
@@ -24,15 +25,14 @@ _MANUAL = (
 )
 
 
-def default_path():
-    return get_data_dir() / "orthologs" / "human_mouse_one2one.tsv"
+DEFAULT_PATH = Path(__file__).resolve().parent / "resources" / "human_mouse_one2one.tsv"
 
 
 def build_one2one_table(path=None, timeout=600):
     """Query BioMart for human-mouse orthologs, keep the one-to-one pairs, and save them as TSV."""
     import requests
 
-    path = Path(path) if path else default_path()
+    path = Path(path) if path else DEFAULT_PATH
     r = requests.get(BIOMART_URL, params={"query": _QUERY}, timeout=timeout)
     r.raise_for_status()
     if not r.text.startswith("Gene name"):
@@ -51,7 +51,7 @@ def load_one2one(path=None):
     Builds the table from BioMart if the file is missing. Accepts both the saved two-column
     file and a raw BioMart export (columns 'Gene name', 'Mouse gene name', 'Mouse homology type').
     """
-    path = Path(path) if path else default_path()
+    path = Path(path) if path else DEFAULT_PATH
     if not path.exists():
         try:
             build_one2one_table(path)
