@@ -28,3 +28,9 @@ build-backend = "uv_build"
 
 [tool.uv]
 package = false
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "papermill>=2.7.0",
+]

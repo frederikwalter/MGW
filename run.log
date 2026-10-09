@@ -1,0 +1,6 @@
+Bytecode compiled 18922 files in 7.18s
+Input Notebook:  laterality_test/laterality_score.ipynb
+Output Notebook: laterality_test/full_run.ipynb
+Executing:   0%|          | 0/20 [00:00<?, ?cell/s][IPKernelApp] WARNING | Kernel is running over TCP without encryption. All communication (including code and outputs) is sent in plain text and is susceptible to eavesdropping. Use IPC transport or launch with kernel manager-provisioned CurveZMQ keys to enable transport encryption.
+Executing notebook with kernel: python3
+Executing:   5%|▌         | 1/20 [00:01<00:22,  1.16s/cell]Executing:  10%|█         | 2/20 [00:15<02:36,  8.70s/cell]Executing:  55%|█████▌    | 11/20 [00:15<00:09,  1.03s/cell]Executing:  55%|█████▌    | 11/20 [00:30<00:09,  1.03s/cell]Executing:  60%|██████    | 12/20 [25:30<24:57, 187.23s/cell]Executing:  70%|███████   | 14/20 [25:30<13:51, 138.57s/cell]Executing:  90%|█████████ | 18/20 [25:45<02:42, 81.04s/cell] Executing:  95%|█████████▌| 19/20 [25:45<01:10, 70.35s/cell]Executing: 100%|██████████| 20/20 [25:48<00:00, 77.43s/cell]
