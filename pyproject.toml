@@ -32,7 +32,7 @@ module-root = ""
 module-name = "mgw"
 
 [tool.uv]
-package = false
+package = true
 
 [dependency-groups]
 dev = [
