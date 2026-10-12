@@ -26,6 +26,10 @@ mgw = "mgw:main"
 requires = ["uv_build>=0.12.13,<0.13.0"]
 build-backend = "uv_build"
 
+[tool.uv.build-backend]
+module-root = ""
+module-name = "mgw"
+
 [tool.uv]
 package = false
 
