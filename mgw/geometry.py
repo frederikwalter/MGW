@@ -4,6 +4,8 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import shortest_path
 from sklearn.neighbors import NearestNeighbors
 from scipy.sparse.csgraph import dijkstra  # fastest in SciPy for sparse graphs
+from scipy.sparse.csgraph import connected_components
+from scipy.spatial import cKDTree
 from torch.func import jacrev, vmap
 
 
@@ -49,6 +51,25 @@ def knn_graph(coords: np.ndarray, k:int=10):
             rows.append(j); cols.append(i); data.append(d)  # symmetric
     n = len(coords)
     G = csr_matrix((data, (rows, cols)), shape=(n, n))
+    return _connect_components(coords, G)
+
+def _connect_components(coords: np.ndarray, G: csr_matrix):
+    """
+    Join the pieces of a disconnected kNN graph: link the smallest component to its nearest
+    point outside it until one component is left. Otherwise geodesic distances between the
+    pieces are inf (e.g. tissue fragments isolated by dropped labels) and the GW costs become NaN.
+    """
+    n_comp, lab = connected_components(G, directed=False)
+    if n_comp == 1:
+        return G
+    print(f'knn_graph: joining {n_comp} components (sizes {sorted(np.bincount(lab).tolist(), reverse=True)}).')
+    while n_comp > 1:
+        inside = np.flatnonzero(lab == np.argmin(np.bincount(lab)))
+        outside = np.flatnonzero(lab != lab[inside[0]])
+        d, j = cKDTree(coords[outside]).query(coords[inside])
+        a, b = inside[d.argmin()], outside[j[d.argmin()]]
+        G = G + csr_matrix(([d.min(), d.min()], ([a, b], [b, a])), shape=G.shape)
+        n_comp, lab = connected_components(G, directed=False)
     return G
 
 def _edge_length_local(x_i, x_j, Gi, Gj):

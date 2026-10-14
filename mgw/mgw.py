@@ -236,6 +236,9 @@ def mgw_align_core(
     if verbose: print(f"[mgw.core] cost matrices: d^{cost_p} (cost_p={cost_p})")
     C_M = _norm_geod(D_M)**cost_p; C_M /= (C_M.max() + 1e-12)
     C_N = _norm_geod(D_N)**cost_p; C_N /= (C_N.max() + 1e-12)
+    for name, C in (("C_M", C_M), ("C_N", C_N)):
+        if not np.isfinite(C).all():
+            raise ValueError(f"{name} has {(~np.isfinite(C)).sum()} non-finite entries; the GW coupling would be NaN")
 
     if gw_params is None:
         gw_params = dict(verbose=True, inner_maxit=3000, outer_maxit=3000,
