@@ -185,6 +185,99 @@ def downsample_per_slice(adata, max_obs=10_000, random_state=42):
     idx = rng.choice(adata.n_obs, size=max_obs, replace=False)
     return adata[idx].copy()
 
+def _grid_assign(xy, max_obs, n_bisect=40):
+    """Square tiles; the smallest side for which at most max_obs tiles are occupied."""
+    def tiles(s):
+        return np.unique(np.floor((xy - xy.min(0)) / s).astype(np.int64), axis=0, return_inverse=True)[1].ravel()
+    lo, hi = 1e-9, float(np.ptp(xy, axis=0).max()) + 1.0
+    for _ in range(n_bisect):
+        mid = np.sqrt(lo * hi)
+        if tiles(mid).max() + 1 > max_obs:
+            lo = mid
+        else:
+            hi = mid
+    return tiles(hi), hi
+
+def merge_bins(adata, max_obs=10_000, method="voronoi", agg="sum", label_key="label",
+               random_state=42, lloyd_iter=3):
+    """Reduce `adata` to ≤max_obs super-bins by merging neighbouring bins.
+
+    adata.X must hold raw counts and adata.obsm["spatial"] the coordinates.
+
+    method
+        "random"  : keep the bins of `downsample_per_slice` (same seed); every other bin is
+                    assigned to its nearest kept bin, but no counts are merged.
+        "voronoi" : the same bins as seeds; every bin joins its nearest seed, followed by
+                    `lloyd_iter` Lloyd steps (seeds move to their tile centroids).
+        "grid"    : square tiles, side chosen so that ≈max_obs tiles are occupied.
+    agg
+        "sum" : summed counts (the mean gives the same result after normalize_total).
+        "rms" : sqrt(mean of squared counts) over the member bins.
+
+    Returns (merged AnnData, assign), where assign[i] is the super-bin of bin i.
+    The merged obs hold the majority label, its share (`purity`) and the number of member bins (`n_bins`).
+    """
+    from scipy.spatial import cKDTree
+    xy = np.asarray(adata.obsm["spatial"][:, :2], dtype=np.float64)
+    n = adata.n_obs
+    # the same bins (and order) as downsample_per_slice
+    seeds = (np.random.default_rng(random_state).choice(n, size=max_obs, replace=False)
+             if n > max_obs else np.arange(n))
+
+    side = None
+    if method in ("random", "voronoi"):
+        assign = cKDTree(xy[seeds]).query(xy)[1]
+        if method == "voronoi":
+            for _ in range(lloyd_iter):
+                assign = np.unique(assign, return_inverse=True)[1].ravel()  # drop empty tiles
+                centres = np.stack([np.bincount(assign, w) for w in xy.T], 1) / np.bincount(assign)[:, None]
+                assign = cKDTree(centres).query(xy)[1]
+            assign = np.unique(assign, return_inverse=True)[1].ravel()
+    elif method == "grid":
+        assign, side = _grid_assign(xy, max_obs)
+    else:
+        raise ValueError(f"unknown method {method!r}")
+
+    n_tiles = int(assign.max()) + 1
+    M = sp.csr_matrix((np.ones(n), (assign, np.arange(n))), shape=(n_tiles, n))
+    n_bins = np.asarray(M.sum(1)).ravel()
+    n_bins = np.maximum(n_bins, 1)  # a kept bin can lose its tile to a duplicate coordinate
+    inv_n = sp.diags(1.0 / n_bins)
+
+    labels = adata.obs[label_key].astype(str).to_numpy()
+    classes, codes = np.unique(labels, return_inverse=True)
+    onehot = sp.csr_matrix((np.ones(n), (np.arange(n), codes)), shape=(n, len(classes)))
+
+    X = sp.csr_matrix(adata.X, dtype=np.float32)
+    if method == "random":
+        # keep the kept bins as they are, ordered by tile index
+        rows = seeds
+        X_out = X[rows]
+        xy_out = xy[rows]
+        lab_out = labels[rows]
+        purity = np.asarray((M @ onehot)[np.arange(n_tiles), codes[rows]]).ravel() / n_bins
+    else:
+        if agg == "sum":
+            X_out = M @ X
+        elif agg == "rms":
+            X_out = (inv_n @ (M @ X.multiply(X))).sqrt()
+        else:
+            raise ValueError(f"unknown agg {agg!r}")
+        xy_out = inv_n @ (M @ xy)
+        votes = (M @ onehot).toarray()
+        lab_out = classes[votes.argmax(1)]
+        purity = votes.max(1) / n_bins
+
+    out = ad.AnnData(sp.csr_matrix(X_out, dtype=np.float32),
+                     obs=pd.DataFrame({label_key: lab_out, "purity": purity, "n_bins": n_bins.astype(int)},
+                                      index=(adata.obs_names[seeds] if method == "random"
+                                             else pd.Index([f"tile{i}" for i in range(n_tiles)]))),
+                     var=adata.var.copy())
+    out.obsm["spatial"] = np.asarray(xy_out)
+    out.uns["merge"] = dict(method=method, agg=agg if method != "random" else "none", n_bins_in=n,
+                            lloyd_iter=lloyd_iter if method == "voronoi" else 0, tile_side=side)
+    return out, assign
+
 def cca_from_unpaired(sp_xy_A, sp_xy_B, feats_A, feats_B, n_components=2, K=8):
     """Return (A_cca, B_cca, cca, sc_A, sc_B) given coords + neural feats.
        Pairs B→A via barycentric KNN on coords, fits CCA, and projects ALL points."""

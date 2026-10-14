@@ -116,8 +116,10 @@ def unit_coords(coords, *, flip_y: bool = False) -> np.ndarray:
     xy = np.asarray(coords, dtype=np.float64)[:, :2].copy()
     lo = np.nanpercentile(xy, 0.5, axis=0)
     hi = np.nanpercentile(xy, 99.5, axis=0)
-    xy = (xy - lo) / np.maximum(hi - lo, 1e-12)
-    xy = np.clip(xy, -0.03, 1.03)
+    # one scale for both axes, so the section keeps its aspect ratio (and the Procrustes fit its shape)
+    span = max(float(np.max(hi - lo)), 1e-12)
+    xy = (xy - lo) / span
+    xy = np.clip(xy, -0.03, (hi - lo) / span + 0.03)
     xy -= np.average(xy, axis=0)
     xy /= max(np.ptp(xy[:, 0]), np.ptp(xy[:, 1]), 1e-12)
     if flip_y:
@@ -245,8 +247,13 @@ def plot_tilted_alignment(
     seed: int = 7,
     flip_y: bool = False,
     block_rows: int = 512,
+    allow_reflection: bool = False,
 ):
-    """Tilted two-layer view of a coupling: the top-k targets of every source location as alignment lines."""
+    """Tilted two-layer view of a coupling: the top-k targets of every source location as alignment lines.
+
+    The bottom layer is drawn in the rigid Procrustes frame implied by the coupling. By default this is a
+    proper rotation; allow_reflection=True also allows a mirror image, which GW cannot tell apart.
+    """
     with mpl.rc_context(STYLE):
         return _plot_tilted_alignment(**locals())
 
@@ -254,14 +261,20 @@ def plot_tilted_alignment(
 def _plot_tilted_alignment(
     coords_top, coords_bottom, labels_top, labels_bottom, P, *, dataset_title, top_name, bottom_name,
     label_description, save, method, k_per_point, alpha, linewidth, line_color, preferred_colors,
-    max_points, elev, azim, seed, flip_y, block_rows,
+    max_points, elev, azim, seed, flip_y, block_rows, allow_reflection,
 ):
     A = unit_coords(coords_top, flip_y=flip_y)
     B = unit_coords(coords_bottom, flip_y=flip_y)
     P = load_coupling(P) if isinstance(P, (str, Path)) else P
     P = orient_coupling(P, len(A), len(B))
-    B_aligned, R_display, _, _, _ = coupling_procrustes(A, B, P, ensure_rotation=True)
+    B_aligned, R_display, _, _, _ = coupling_procrustes(A, B, P, ensure_rotation=not allow_reflection)
     display_angle = _proper_rotation_degrees(R_display)
+    reflected = np.linalg.det(R_display) < 0
+    frame_text = (f"coupling-implied reflection, mirror axis {display_angle / 2:+.0f}°" if reflected
+                  else f"coupling-implied rotation {display_angle:+.0f}°")
+    frame_caption = ("coupling-implied Procrustes frame (reflection allowed; here a reflection)" if reflected
+                     else "coupling-implied Procrustes frame (reflection allowed; here a rotation)" if allow_reflection
+                     else "coupling-implied proper-rotation Procrustes frame (no reflection)")
     labels_top = np.asarray(labels_top, dtype=str)
     labels_bottom = np.asarray(labels_bottom, dtype=str)
     classes, palette = _category_palette(labels_top, labels_bottom, preferred_colors)
@@ -302,7 +315,7 @@ def _plot_tilted_alignment(
     ax.scatter(A[ia, 0], A[ia, 1], np.full(len(ia), z_top), c=color_top[ia], s=5.0, alpha=0.86, linewidths=0, depthshade=False, rasterized=True, zorder=3)
     ax.scatter(B_aligned[ib, 0], B_aligned[ib, 1], np.full(len(ib), z_bottom), c=color_bottom[ib], s=5.0, alpha=0.74, linewidths=0, depthshade=False, rasterized=True, zorder=2)
     ax.set_title(method, color=MGW_BLUE, weight="bold", fontsize=12.2, pad=0)
-    ax.text2D(0.50, 0.900, f"coupling-implied rotation {display_angle:+.0f}°", transform=ax.transAxes, ha="center", fontsize=7.9, color=MUTED)
+    ax.text2D(0.50, 0.900, frame_text, transform=ax.transAxes, ha="center", fontsize=7.9, color=MUTED)
     ax.text2D(0.50, 0.025, f"{len(src):,} alignment lines  ·  top {k} targets per {top_name} location", transform=ax.transAxes, ha="center", fontsize=7.9, color=MUTED)
     _add_layer_badges(ax, top_name, bottom_name)
     all_xy = np.vstack([A, B_aligned])
@@ -322,7 +335,7 @@ def _plot_tilted_alignment(
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.012), ncol=min(len(handles), max(4, int(figure_width / 1.4))), fontsize=8.1, handletextpad=0.35, columnspacing=0.85)
     fig.suptitle(dataset_title, x=0.015, y=0.982, ha="left", fontsize=17, weight="bold")
     subtitle = (f"Layers are colored independently by {label_description}; the bottom layer is shown in its "
-                "coupling-implied proper-rotation Procrustes frame (no reflection).")
+                f"{frame_caption}.")
     fig.text(0.015, 0.930, _wrapped_caption(subtitle, figure_width), fontsize=9.1, color=MUTED, va="top", linespacing=1.2)
     footer = (f"Every {top_name} location is joined to its {k} highest-mass targets; line opacity is proportional "
               "to the transported mass relative to that location's peak.")
