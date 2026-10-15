@@ -13,6 +13,7 @@ dependencies = [
     "jax>=0.11.1",
     "jax[cuda13]>=0.11.1; sys_platform == 'linux'",
     "jupyter>=1.1.1",
+    "moscot>=0.5.2",
     "numpy>=2.5.3",
     "ott-jax>=0.6.0",
     "plotly>=7.1.0",
