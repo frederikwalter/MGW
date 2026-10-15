@@ -4,6 +4,7 @@ import numpy as np, torch, os, scipy.sparse as sp
 from mgw import util, models, geometry, plotting
 from mgw.gw import solve_gw_ott
 from sklearn.preprocessing import normalize
+from scipy.spatial.distance import cdist
 
 def mgw_preprocess(
     A, B,
@@ -23,8 +24,13 @@ def mgw_preprocess(
     # feeler flavors
     spatial_only: bool = True,
     feature_only: bool = False,
+    feeler_pairing: str = "spatial",
+    fused_alpha: float = 1.0,
+    # cross-section cost
+    cross_key: Optional[str] = None,
     # normalization
     rep_norm: str = "l2",
+    coords: str = "unit_square",
     # misc
     verbose: bool = True,
 ) -> Dict[str, Any]:
@@ -38,12 +44,31 @@ def mgw_preprocess(
         (existing default).  ``"zscore"`` applies per-column zero-mean
         unit-variance scaling (matches the original experiment in
         ``mgw_mouse_embryo.ipynb`` which used ``util.normalize_range``).
+    cross_key : str, optional
+        ``obsm`` key of features that A and B share (e.g. an ortholog embedding).
+        Their distances form the cross cost ``M`` (n_A x n_B, 0.99 quantile = 1),
+        returned as ``pre["M"]`` and used by the feeler pairing.
+    feeler_pairing : str, default "spatial"
+        How the CCA feeler pairs the bins: ``"spatial"`` (spatial-only GW, blind to
+        mirror images), ``"cross"`` (linear OT on ``M``) or ``"fused"`` (spatial GW
+        plus ``fused_alpha * <M, P>``). The last two need ``cross_key``.
+    coords : str, default "unit_square"
+        ``"unit_square"`` scales x and y separately to [0, 1]; ``"isotropic"`` keeps
+        the aspect ratio.
     """
     A_ = _maybe_subsample(A, max_obs_A)
     B_ = _maybe_subsample(B, max_obs_B)
 
-    xs  = _to_unit_square(A_.obsm["spatial"])
-    xs2 = _to_unit_square(B_.obsm["spatial"])
+    norm_coords = util.normalize_coords_isotropic if coords == "isotropic" else _to_unit_square
+    xs  = norm_coords(A_.obsm["spatial"])
+    xs2 = norm_coords(B_.obsm["spatial"])
+
+    M = None
+    if cross_key is not None:
+        M = cdist(np.asarray(A_.obsm[cross_key], dtype=np.float64), np.asarray(B_.obsm[cross_key], dtype=np.float64))
+        M /= np.quantile(M, 0.99) + 1e-12
+        if verbose:
+            print(f"[mgw.pre] cross cost from obsm[{cross_key!r}]: {M.shape}")
 
     def _get_pca(adata, n_comps, log1p):
         if "X_pca" in adata.obsm and adata.obsm["X_pca"].shape[1] >= n_comps:
@@ -82,6 +107,10 @@ def mgw_preprocess(
             verbose=verbose,
             spatial_only=spatial_only,
             feature_only=feature_only,
+            pairing=feeler_pairing,
+            M=M,
+            fused_alpha=fused_alpha,
+            coords=coords,
         )
         X_rep = feeler["X_cca_full"]
         Z_rep = feeler["Z_cca_full"]
@@ -106,12 +135,14 @@ def mgw_preprocess(
         X_feat=X_pca, Z_feat=Z_pca,
         X_rep=X_rep, Z_rep=Z_rep,
         feeler=feeler,
+        M=M,
         config=dict(
             PCA_comp=PCA_comp, CCA_comp=CCA_comp, use_cca_feeler=use_cca_feeler,
             feeler_downsample=feeler_downsample, log1p_X=log1p_X, log1p_Z=log1p_Z,
             use_pca_X=use_pca_X, use_pca_Z=use_pca_Z,
             spatial_only=spatial_only, feature_only=feature_only,
-            rep_norm=rep_norm,
+            feeler_pairing=feeler_pairing, fused_alpha=fused_alpha, cross_key=cross_key,
+            rep_norm=rep_norm, coords=coords,
             max_obs_A=max_obs_A, max_obs_B=max_obs_B,
         ),
     )
@@ -279,7 +310,8 @@ def mgw_align(
     use_pca_X: bool = True, use_pca_Z: bool = True,
     max_obs_A: Optional[int] = None, max_obs_B: Optional[int] = None,
     spatial_only: bool = True, feature_only: bool = False,
-    rep_norm: str = "l2",
+    feeler_pairing: str = "spatial", fused_alpha: float = 1.0, cross_key: Optional[str] = None,
+    rep_norm: str = "l2", coords: str = "unit_square",
     # core knobs
     widths: tuple = (128, 256, 256, 128), lr: float = 1e-3,
     niter: int = 20_000, print_every: int = 1_000,
@@ -299,7 +331,8 @@ def mgw_align(
         use_pca_X=use_pca_X, use_pca_Z=use_pca_Z,
         max_obs_A=max_obs_A, max_obs_B=max_obs_B,
         spatial_only=spatial_only, feature_only=feature_only,
-        rep_norm=rep_norm,
+        feeler_pairing=feeler_pairing, fused_alpha=fused_alpha, cross_key=cross_key,
+        rep_norm=rep_norm, coords=coords,
         verbose=verbose,
     )
     return mgw_align_core(

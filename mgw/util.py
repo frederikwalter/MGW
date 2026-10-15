@@ -38,8 +38,26 @@ def project_informative_features(
     use_pca_Z=True,
     spatial_key="spatial",
     spatial_only=True,
-    feature_only=False
+    feature_only=False,
+    pairing="spatial",
+    M=None,
+    fused_alpha=1.0,
+    coords="unit_square",
 ):
+    """Pair the bins of two sections with a small OT problem, then fit a CCA between their PCAs.
+
+    pairing
+        "spatial" : GW on the cost matrices chosen by spatial_only / feature_only (the original feeler).
+                    Spatial-only GW cannot tell a section from its mirror image.
+        "cross"   : linear OT on the cross cost M (n_X x n_Z), e.g. distances in a shared ortholog space.
+        "fused"   : fused GW, the spatial GW plus fused_alpha * <M, P>.
+    coords
+        "unit_square" scales x and y separately to [0, 1]; "isotropic" keeps the aspect ratio.
+    """
+    if pairing not in ("spatial", "cross", "fused"):
+        raise ValueError(f"unknown pairing {pairing!r}")
+    if pairing != "spatial" and M is None:
+        raise ValueError(f"pairing={pairing!r} needs the cross cost M")
     if adata_X is not None and adata_Z is not None:
         st_xy = adata_X.obsm[spatial_key]
         sm_xy = adata_Z.obsm[spatial_key]
@@ -47,8 +65,9 @@ def project_informative_features(
         st_xy, adata_X = _ann_load(path_X, X_layer)
         sm_xy, adata_Z = _ann_load(path_Z, Z_layer)
     
-    xs = normalize_coords_to_unit_square(st_xy)
-    xt = normalize_coords_to_unit_square(sm_xy)
+    norm_coords = normalize_coords_isotropic if coords == "isotropic" else normalize_coords_to_unit_square
+    xs = norm_coords(st_xy)
+    xt = norm_coords(sm_xy)
     
     '''
     X_pca = get_or_compute_pca(adata_X, layer=X_layer, n_comps=PCA_comp, log1p=log1p_features)
@@ -106,7 +125,11 @@ def project_informative_features(
         q = np.quantile(C[np.triu_indices_from(C, 1)], 0.99)
         return C/(q + 1e-12)
     
-    if spatial_only:
+    if pairing == "fused":
+        C1, C2 = _norm(cdist(xs_gw, xs_gw)), _norm(cdist(xt_gw, xt_gw))
+    elif pairing == "cross":
+        C1 = C2 = None
+    elif spatial_only:
         # Normalize costs to comparable scale (quantile) to help solvers.
         Dxs, Dxt  = cdist(xs_gw, xs_gw), cdist(xt_gw, xt_gw)
         C1,C2 = _norm(Dxs), _norm(Dxt)
@@ -121,11 +144,20 @@ def project_informative_features(
         C1 = _norm(Dxs) * _norm(Dfx)
         C2 = _norm(Dxt) * _norm(Dfz)
     
-    print('Solving feeler feature alignment.')
+    print(f'Solving feeler feature alignment ({pairing}).')
     gw_params = dict(verbose=True, inner_maxit=2000, outer_maxit=2000,
                  inner_tol=1e-6, outer_tol=1e-6, epsilon=feeler_epsilon)
     
-    P = solve_gw_ott(C1, C2, **gw_params)
+    if pairing == "spatial":
+        P = solve_gw_ott(C1, C2, **gw_params)
+    else:
+        M_gw = np.asarray(M, dtype=np.float64)[np.ix_(idxX, idxZ)]
+        M_gw = M_gw / (np.quantile(M_gw, 0.99) + 1e-12)
+        if pairing == "fused":
+            P = solve_gw_ott(C1, C2, M=M_gw, alpha=fused_alpha, **gw_params)
+        else:
+            P = _solve_linear_ott(M_gw, epsilon=feeler_epsilon, maxit=gw_params["inner_maxit"],
+                                  tol=gw_params["inner_tol"])
     Z_bary_on_X = _barycentric_right(P, Zpca_gw)   # shape (|X_gw|, dZ)
     
     X_scaler = StandardScaler(with_mean=True, with_std=True).fit(Xpca_gw)
@@ -159,9 +191,20 @@ def project_informative_features(
             idxX_feeler=idxX,
             idxZ_feeler=idxZ,
             PCA_comp=PCA_comp, CCA_comp=n_comp,
-            feeler_epsilon=feeler_epsilon
+            feeler_epsilon=feeler_epsilon,
+            pairing=pairing, fused_alpha=fused_alpha, coords=coords,
         )
     )
+
+def _solve_linear_ott(M, epsilon=1e-3, maxit=2000, tol=1e-6):
+    """Entropic OT with uniform marginals on the cost matrix M."""
+    import jax.numpy as jnp
+    from ott.geometry import geometry
+    from ott.problems.linear import linear_problem
+    from ott.solvers.linear.sinkhorn import Sinkhorn
+    geom = geometry.Geometry(cost_matrix=jnp.asarray(M, dtype=jnp.float32), epsilon=epsilon)
+    out = Sinkhorn(max_iterations=maxit, threshold=tol)(linear_problem.LinearProblem(geom))
+    return np.array(out.matrix)
 
 def normalize_range(ys_t):
     ys_t  = ys_t - ys_t.mean(0, keepdim=True)
@@ -388,6 +431,12 @@ def normalize_coords_to_unit_square(Xxy):
     m = Xxy.min(0, keepdims=True)
     M = Xxy.max(0, keepdims=True)
     return (Xxy - m) / (M - m + 1e-12)
+
+def normalize_coords_isotropic(Xxy):
+    """Shift to the origin and divide both axes by the larger extent: keeps the aspect ratio."""
+    Xxy = np.asarray(Xxy, dtype=np.float64)
+    m = Xxy.min(0, keepdims=True)
+    return (Xxy - m) / (np.ptp(Xxy, axis=0).max() + 1e-12)
 
 def log1p_if(X):
     return np.log1p(X) if log1p_features else X

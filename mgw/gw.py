@@ -102,9 +102,10 @@ def solve_gw(C1, C2, a=None, b=None,
 def solve_gw_ott(C1, C2, a=None, b=None,
                         epsilon=1e-2, inner_tol=1e-7, outer_tol=1e-7,
                          tau_a=1, tau_b=1,
-                        inner_maxit=4000, outer_maxit=1000, verbose=True, 
-                         jit=True):
-    
+                        inner_maxit=4000, outer_maxit=1000, verbose=True,
+                         jit=True, M=None, alpha=1.0):
+    """Entropic GW between C1 and C2. With a cross cost M (n1 x n2) it is fused GW,
+    with alpha weighting the linear term <M, P> against the quadratic one."""
     n1 = C1.shape[0]
     n2 = C2.shape[0]
     
@@ -121,8 +122,12 @@ def solve_gw_ott(C1, C2, a=None, b=None,
     geom_x = geometry.Geometry(cost_matrix=C1_j, epsilon=epsilon)
     geom_y = geometry.Geometry(cost_matrix=C2_j, epsilon=epsilon)
     
+    # Cross-domain geometry for the fused term (OTT: fused_penalty multiplies the linear term)
+    geom_xy = None if M is None else geometry.Geometry(cost_matrix=jnp.asarray(M, dtype=jnp.float32), epsilon=epsilon)
+
     # Quadratic GW problem
-    prob = quadratic_problem.QuadraticProblem(geom_x, geom_y, a=a_j, b=b_j, tau_a=tau_a, tau_b=tau_b)
+    prob = quadratic_problem.QuadraticProblem(geom_x, geom_y, geom_xy=geom_xy, fused_penalty=alpha,
+                                              a=a_j, b=b_j, tau_a=tau_a, tau_b=tau_b)
     
     # Inner linear solver + outer GW solver
     lin = Sinkhorn(max_iterations=inner_maxit, threshold=inner_tol)

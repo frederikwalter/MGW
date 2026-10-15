@@ -73,3 +73,46 @@ def restrict_to_orthologs(genes_human, genes_mouse, table):
     """Ortholog pairs present in both gene lists, as two aligned arrays (human, mouse)."""
     hit = table[table.human.isin(set(genes_human)) & table.mouse.isin(set(genes_mouse))]
     return hit.human.to_numpy(), hit.mouse.to_numpy()
+
+
+def shared_embedding(A, B, table=None, n_hvg=2000, n_comps=30, exclude=None):
+    """Embed two log-normalized sections in one space spanned by matched genes.
+
+    With `table` (a load_one2one frame) A is human and B mouse, and genes are matched through the
+    1:1 orthologs; without it, by name (two sections of one species). The genes used are the union of
+    the `n_hvg` most variable matched genes of each section, minus `exclude` (named as in A). Each gene
+    is z-scored within each section, which removes offsets between species or sections, and the two
+    sections are then projected on a joint PCA.
+
+    Returns (EA, EB, genes): the embeddings (n_A x n_comps, n_B x n_comps) and the genes used (A's names).
+    """
+    import numpy as np
+    import scipy.sparse as sp
+    from sklearn.utils.extmath import randomized_svd
+
+    if table is not None:
+        ga, gb = restrict_to_orthologs(A.var_names, B.var_names, table)
+    else:
+        ga = gb = np.intersect1d(A.var_names, B.var_names)
+    XA, XB = A[:, ga].X, B[:, gb].X
+
+    def var(X):
+        mean = np.asarray(X.mean(0)).ravel()
+        sq = np.asarray(X.multiply(X).mean(0)).ravel() if sp.issparse(X) else (np.asarray(X) ** 2).mean(0)
+        return sq - mean ** 2
+
+    keep = np.zeros(len(ga), dtype=bool)
+    for X in (XA, XB):
+        keep[np.argsort(-var(X))[:n_hvg]] = True
+    if exclude is not None:
+        keep &= ~np.isin(ga, np.asarray(exclude))
+
+    def zscore(X):
+        X = np.asarray(X.toarray() if sp.issparse(X) else X, dtype=np.float32)
+        return (X - X.mean(0)) / (X.std(0) + 1e-6)
+
+    J = np.vstack([zscore(XA[:, keep]), zscore(XB[:, keep])])
+    J -= J.mean(0)
+    U, S, _ = randomized_svd(J, n_components=n_comps, random_state=0)
+    E = (U[:, :n_comps] * S[:n_comps]).astype(np.float64)
+    return E[:A.n_obs], E[A.n_obs:], np.asarray(ga)[keep]
