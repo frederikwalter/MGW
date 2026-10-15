@@ -25,7 +25,7 @@ def mgw_preprocess(
     spatial_only: bool = True,
     feature_only: bool = False,
     feeler_pairing: str = "spatial",
-    fused_alpha: float = 1.0,
+    feeler_alpha: float = 1.0,
     # cross-section cost
     cross_key: Optional[str] = None,
     # normalization
@@ -51,7 +51,7 @@ def mgw_preprocess(
     feeler_pairing : str, default "spatial"
         How the CCA feeler pairs the bins: ``"spatial"`` (spatial-only GW, blind to
         mirror images), ``"cross"`` (linear OT on ``M``) or ``"fused"`` (spatial GW
-        plus ``fused_alpha * <M, P>``). The last two need ``cross_key``.
+        plus ``feeler_alpha * <M, P>``). The last two need ``cross_key``.
     coords : str, default "unit_square"
         ``"unit_square"`` scales x and y separately to [0, 1]; ``"isotropic"`` keeps
         the aspect ratio.
@@ -66,7 +66,7 @@ def mgw_preprocess(
     M = None
     if cross_key is not None:
         M = cdist(np.asarray(A_.obsm[cross_key], dtype=np.float64), np.asarray(B_.obsm[cross_key], dtype=np.float64))
-        M /= np.quantile(M, 0.99) + 1e-12
+        M = (M / (np.quantile(M, 0.99) + 1e-12)).astype(np.float32)
         if verbose:
             print(f"[mgw.pre] cross cost from obsm[{cross_key!r}]: {M.shape}")
 
@@ -109,7 +109,7 @@ def mgw_preprocess(
             feature_only=feature_only,
             pairing=feeler_pairing,
             M=M,
-            fused_alpha=fused_alpha,
+            fused_alpha=feeler_alpha,
             coords=coords,
         )
         X_rep = feeler["X_cca_full"]
@@ -141,7 +141,7 @@ def mgw_preprocess(
             feeler_downsample=feeler_downsample, log1p_X=log1p_X, log1p_Z=log1p_Z,
             use_pca_X=use_pca_X, use_pca_Z=use_pca_Z,
             spatial_only=spatial_only, feature_only=feature_only,
-            feeler_pairing=feeler_pairing, fused_alpha=fused_alpha, cross_key=cross_key,
+            feeler_pairing=feeler_pairing, feeler_alpha=feeler_alpha, cross_key=cross_key,
             rep_norm=rep_norm, coords=coords,
             max_obs_A=max_obs_A, max_obs_B=max_obs_B,
         ),
@@ -161,6 +161,7 @@ def mgw_align_core(
     # GW solver
     gw_params: Optional[Dict[str, Any]] = None,
     cost_p: int = 2,
+    fused_alpha: float = 0.0,
     seed: Optional[int] = 0,
     deterministic: bool = False,
     n_restarts: int = 3,
@@ -174,8 +175,22 @@ def mgw_align_core(
     verbose: bool = True,
     plot_net: bool = False,
 ) -> Dict[str, Any]:
-    """Core: learn φ,ψ; pullback metrics; GW; return coupling + intermediates."""
+    """Core: learn φ,ψ; pullback metrics; GW; return coupling + intermediates.
+
+    fused_alpha > 0 solves fused GW, GW + fused_alpha * <M, P>, with the cross cost
+    M = pre["M"] (from mgw_preprocess(cross_key=...)). Pure GW compares distances
+    within each section only and cannot tell a section from its mirror image; the
+    cross cost can. fused_alpha = 0 is pure GW.
+    """
     xs, xs2 = pre["xs"], pre["xs2"]
+    M = pre.get("M") if fused_alpha > 0 else None
+    if fused_alpha > 0:
+        if M is None:
+            raise ValueError("fused_alpha > 0 needs a cross cost: run mgw_preprocess with cross_key")
+        if M.shape != (len(xs), len(xs2)):
+            raise ValueError(f"cross cost has shape {M.shape}, expected {(len(xs), len(xs2))}")
+        if not np.isfinite(M).all():
+            raise ValueError(f"cross cost has {(~np.isfinite(M)).sum()} non-finite entries")
     X_rep, Z_rep = pre["X_rep"], pre["Z_rep"]
 
     if device is None:
@@ -190,10 +205,10 @@ def mgw_align_core(
         best, best_obj = None, np.inf
         for k in range(n_restarts):
             run = mgw_align_core(pre, widths=widths, lr=lr, niter=niter, print_every=print_every, knn_k=knn_k,
-                                 geodesic_eps=geodesic_eps, gw_params=gw_params, cost_p=cost_p,
+                                 geodesic_eps=geodesic_eps, gw_params=gw_params, cost_p=cost_p, fused_alpha=fused_alpha,
                                  seed=None if seed is None else seed + k, deterministic=deterministic, n_restarts=1,
                                  device=device, torch_default_dtype=torch_default_dtype, verbose=verbose, plot_net=plot_net)
-            obj = _gw_objective(run["C_M"], run["C_N"], run["P"], device)
+            obj = _gw_objective(run["C_M"], run["C_N"], run["P"], device, M=M, alpha=fused_alpha)
             if verbose: print(f"[mgw.core] restart {k + 1}/{n_restarts}: GW objective={obj:.6e}")
             if obj < best_obj: best, best_obj = run, obj
         best["config"].update(n_restarts=n_restarts, save_dir=save_dir, tag=tag)
@@ -277,8 +292,15 @@ def mgw_align_core(
     if verbose: print(f"[mgw.core] solving GW with {gw_params}")
     # Return torch's cached GPU blocks so JAX can use them for the GW solve
     if torch.cuda.is_available(): torch.cuda.empty_cache()
-    P = solve_gw_ott(C_M, C_N, **gw_params)
+    if M is None:
+        P = solve_gw_ott(C_M, C_N, **gw_params)
+    else:
+        P = solve_gw_ott(C_M, C_N, M=M, alpha=fused_alpha, **gw_params)
     if verbose: print(f"[mgw.core] coupling: shape={P.shape}, mass={P.sum():.6f}")
+    if verbose and M is not None:
+        gw_term = _gw_objective(C_M, C_N, P, device)
+        lin_term = float((np.asarray(M, dtype=np.float64) * P).sum())
+        print(f"[mgw.core] FGW: GW term {gw_term:.4e}, linear term <M,P> {lin_term:.4e} (alpha={fused_alpha})")
 
     if save_dir:
         np.save(os.path.join(save_dir, f"P{suffix}.npy"), P)
@@ -290,12 +312,13 @@ def mgw_align_core(
         phi=phi, psi=psi,
         G_M=G_M, G_N=G_N,
         C_M=C_M, C_N=C_N,
+        M=pre.get("M"),
         feeler=pre.get("feeler"),
         config=dict(
             **pre["config"],
             widths=widths, lr=lr, niter=niter,
             knn_k=knn_k, geodesic_eps=geodesic_eps,
-            gw_params=gw_params, cost_p=cost_p, seed=seed, deterministic=deterministic, n_restarts=n_restarts, device=device,
+            gw_params=gw_params, cost_p=cost_p, fused_alpha=fused_alpha, seed=seed, deterministic=deterministic, n_restarts=n_restarts, device=device,
             save_dir=save_dir, tag=tag,
         )
     )
@@ -310,14 +333,15 @@ def mgw_align(
     use_pca_X: bool = True, use_pca_Z: bool = True,
     max_obs_A: Optional[int] = None, max_obs_B: Optional[int] = None,
     spatial_only: bool = True, feature_only: bool = False,
-    feeler_pairing: str = "spatial", fused_alpha: float = 1.0, cross_key: Optional[str] = None,
+    feeler_pairing: str = "spatial", feeler_alpha: float = 1.0, cross_key: Optional[str] = None,
     rep_norm: str = "l2", coords: str = "unit_square",
     # core knobs
     widths: tuple = (128, 256, 256, 128), lr: float = 1e-3,
     niter: int = 20_000, print_every: int = 1_000,
     knn_k: int = 12, geodesic_eps: float = 1e-2,
     gw_params: Optional[Dict[str, Any]] = None,
-    cost_p: int = 2, seed: Optional[int] = 0, deterministic: bool = False, n_restarts: int = 3,
+    cost_p: int = 2, fused_alpha: float = 0.0,
+    seed: Optional[int] = 0, deterministic: bool = False, n_restarts: int = 3,
     device: Optional[str] = None, torch_default_dtype: torch.dtype = torch.float64,
     save_dir: Optional[str] = None, tag: Optional[str] = None,
     verbose: bool = True, plot_net: bool = False,
@@ -331,7 +355,7 @@ def mgw_align(
         use_pca_X=use_pca_X, use_pca_Z=use_pca_Z,
         max_obs_A=max_obs_A, max_obs_B=max_obs_B,
         spatial_only=spatial_only, feature_only=feature_only,
-        feeler_pairing=feeler_pairing, fused_alpha=fused_alpha, cross_key=cross_key,
+        feeler_pairing=feeler_pairing, feeler_alpha=feeler_alpha, cross_key=cross_key,
         rep_norm=rep_norm, coords=coords,
         verbose=verbose,
     )
@@ -339,7 +363,8 @@ def mgw_align(
         pre,
         widths=widths, lr=lr, niter=niter, print_every=print_every,
         knn_k=knn_k, geodesic_eps=geodesic_eps,
-        gw_params=gw_params, cost_p=cost_p, seed=seed, deterministic=deterministic, n_restarts=n_restarts,
+        gw_params=gw_params, cost_p=cost_p, fused_alpha=fused_alpha,
+        seed=seed, deterministic=deterministic, n_restarts=n_restarts,
         device=device, torch_default_dtype=torch_default_dtype,
         save_dir=save_dir, tag=tag,
         verbose=verbose, plot_net=plot_net,
@@ -356,10 +381,14 @@ def transfer(adata_a, adata_b, P, tag_a="A", tag_b="B", eps=1e-12):
     """
     return util.bary_proj(adata_a, adata_b, P, first_tag=tag_a, second_tag=tag_b, eps=eps)
 
-def _gw_objective(C1, C2, P, device) -> float:
+def _gw_objective(C1, C2, P, device, M=None, alpha=0.0) -> float:
+    """GW objective of P; with a cross cost M, plus alpha * <M, P> (fused GW)."""
     C1, C2, P = (torch.as_tensor(np.asarray(a), dtype=torch.float64, device=device) for a in (C1, C2, P))
     p, q = P.sum(1), P.sum(0)
-    return float(p @ (C1 * C1) @ p + q @ (C2 * C2) @ q - 2 * ((C1 @ P) * (P @ C2)).sum())
+    obj = float(p @ (C1 * C1) @ p + q @ (C2 * C2) @ q - 2 * ((C1 @ P) * (P @ C2)).sum())
+    if M is not None and alpha:
+        obj += alpha * float((torch.as_tensor(np.asarray(M), dtype=torch.float64, device=device) * P).sum())
+    return obj
 
 def _to_unit_square(x: np.ndarray) -> np.ndarray:
     return util.normalize_coords_to_unit_square(np.asarray(x, dtype=float))
