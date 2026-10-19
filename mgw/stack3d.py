@@ -376,12 +376,32 @@ class VirtualSection:
             return np.asarray((self._A @ V).toarray())
         return self._A @ ((1 - self.t)[:, None] * Mi + self.t[:, None] * Mj)
 
+    def interp_rescaled(self, F, centre=None):
+        """Features on the tiles, interpolated without shrinking towards the mean.
+
+        Mixing two points, (1 - t) f_i + t f_j, and averaging the points of a tile both pull the features
+        towards the mean: the mix of two different cells is less distinct than either. A query then sits
+        closer to it on average (E|q - f|² grows with |f - mean|²), so planes between sections, where more
+        is mixed, look better than planes through them. Here the mixed deviation from the stack mean is
+        rescaled to the mixed length of the deviations it came from. Only the length changes, not the
+        direction.
+        """
+        if self.n_obs == 0:
+            return np.zeros((0, F.shape[1]))
+        F = np.asarray(F, dtype=np.float64)
+        m = F.mean(0) if centre is None else centre
+        di, dj = F[self.i] - m, F[self.j] - m
+        mix = self._A @ ((1 - self.t)[:, None] * di + self.t[:, None] * dj)
+        length = self._A @ ((1 - self.t) * np.linalg.norm(di, axis=1) + self.t * np.linalg.norm(dj, axis=1))
+        return m + mix * (length / (np.linalg.norm(mix, axis=1) + 1e-12))[:, None]
+
     def interp_cost(self, Fq, F):
         """Cross cost (n_q x n_tiles) between query features Fq and the tiles, interpolated as a cost.
 
         Each crossing point costs (1 - t) |q - f_i| + t |q - f_j|; tiles average their points by mass.
-        Interpolating the features instead, |q - ((1 - t) f_i + t f_j)|, is never larger (convexity), which
-        would favour planes between sections over planes through them.
+        This is never smaller than the cost to the mixed features (convexity) and leans the other way:
+        a query that matches one endpoint well is pulled up by the other, so planes through real sections
+        win. Kept for comparison; `interp_rescaled` is the unbiased choice.
         """
         if self.n_obs == 0:
             return np.zeros((len(Fq), 0))
@@ -399,6 +419,21 @@ class VirtualSection:
     def source_section(self, section):
         """Section of the nearer endpoint, per tile (majority)."""
         return self.labels(section)
+
+
+def z_from_sections(z, obj):
+    """z between the real sections, from one objective per section (lower is better).
+
+    The vertex of the parabola through the best section and its two neighbours, clipped to between them.
+    Returns (z, edge); edge is True when the best section is the first or the last, and z is then its z.
+    """
+    z, obj = np.asarray(z, dtype=np.float64), np.asarray(obj, dtype=np.float64)
+    k = int(np.nanargmin(obj))
+    if k == 0 or k == len(z) - 1:
+        return float(z[k]), True
+    a, b, _ = np.polyfit(z[k - 1:k + 2], obj[k - 1:k + 2], 2)
+    zv = -b / (2 * a) if a > 0 else z[k]
+    return float(np.clip(zv, z[k - 1], z[k + 1])), False
 
 
 def plane_from_coupling(xyz, P, frame, section=None):
