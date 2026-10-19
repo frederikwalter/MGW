@@ -15,18 +15,18 @@ def pullback_metric_field(phi, X, eps=0.02):
     """
     Homogeneous (global) scale so ||g|| is comparable to I:
       g_scaled(x) = (J^T J) / alpha + eps * I
-    with alpha = median( trace(J^T J)/d ), d=2 here.
+    with alpha = median( trace(J^T J)/d ), d = X.shape[1].
     """
     phi.eval()
     device, dtype = X.device, X.dtype
-    d = X.shape[1]  # 2
-    def phi_single(x):  # R^2 -> R^f
+    d = X.shape[1]
+    def phi_single(x):  # R^d -> R^f
         return phi(x.unsqueeze(0)).squeeze(0)
     # Jacobians at all points (batch vmap+jacrev)
     J = vmap(jacrev(phi_single))(X)                # (N, f, d)
     G = torch.einsum('nfd,nfe->nde', J, J)         # (N, d, d)
     # Typical local scale of g: mean eigenvalue proxy
-    tr_over_d = (G[...,0,0] + G[...,1,1]) / d      # (N,)
+    tr_over_d = torch.diagonal(G, dim1=-2, dim2=-1).sum(-1) / d  # (N,)
     alpha = torch.median(tr_over_d).clamp_min(1e-12)
     print(f'Rescaling Jacobians by {alpha}.')
     # Homogeneous rescale

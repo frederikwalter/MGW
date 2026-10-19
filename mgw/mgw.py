@@ -31,6 +31,8 @@ def mgw_preprocess(
     # normalization
     rep_norm: str = "l2",
     coords: str = "unit_square",
+    spatial_key: str = "spatial",
+    spatial_key_B: Optional[str] = None,
     # misc
     verbose: bool = True,
 ) -> Dict[str, Any]:
@@ -55,13 +57,18 @@ def mgw_preprocess(
     coords : str, default "unit_square"
         ``"unit_square"`` scales x and y separately to [0, 1]; ``"isotropic"`` keeps
         the aspect ratio.
+    spatial_key, spatial_key_B : str
+        ``obsm`` keys of the coordinates of A and B (``spatial_key_B`` defaults to
+        ``spatial_key``). The two sections may have different dimensions, e.g. a 2D
+        section against a 3D stack (``"spatial3d"``); use ``coords="isotropic"`` then,
+        which scales all axes of a section by one factor.
     """
     A_ = _maybe_subsample(A, max_obs_A)
     B_ = _maybe_subsample(B, max_obs_B)
 
     norm_coords = util.normalize_coords_isotropic if coords == "isotropic" else _to_unit_square
-    xs  = norm_coords(A_.obsm["spatial"])
-    xs2 = norm_coords(B_.obsm["spatial"])
+    xs  = norm_coords(A_.obsm[spatial_key])
+    xs2 = norm_coords(B_.obsm[spatial_key_B or spatial_key])
 
     M = None
     if cross_key is not None:
@@ -95,6 +102,8 @@ def mgw_preprocess(
 
     # Optional CCA feeler
     feeler = None
+    if use_cca_feeler and (spatial_key_B or spatial_key) != spatial_key:
+        raise ValueError("the CCA feeler reads one spatial_key for both sections; use cross_key features instead")
     if use_cca_feeler:
         if verbose:
             print("[mgw.pre] CCA feeler: PCA → small GW (fused) → barycentric → CCA")
@@ -111,6 +120,7 @@ def mgw_preprocess(
             M=M,
             fused_alpha=feeler_alpha,
             coords=coords,
+            spatial_key=spatial_key,
         )
         X_rep = feeler["X_cca_full"]
         Z_rep = feeler["Z_cca_full"]
@@ -142,7 +152,7 @@ def mgw_preprocess(
             use_pca_X=use_pca_X, use_pca_Z=use_pca_Z,
             spatial_only=spatial_only, feature_only=feature_only,
             feeler_pairing=feeler_pairing, feeler_alpha=feeler_alpha, cross_key=cross_key,
-            rep_norm=rep_norm, coords=coords,
+            rep_norm=rep_norm, coords=coords, spatial_key=spatial_key, spatial_key_B=spatial_key_B,
             max_obs_A=max_obs_A, max_obs_B=max_obs_B,
         ),
     )
@@ -181,6 +191,12 @@ def mgw_align_core(
     M = pre["M"] (from mgw_preprocess(cross_key=...)). Pure GW compares distances
     within each section only and cannot tell a section from its mirror image; the
     cross cost can. fused_alpha = 0 is pure GW.
+
+    xs and xs2 may have any (and different) dimensions, e.g. a 2D section against a 3D
+    stack of sections. pre["graph_M"] / pre["graph_N"] (sparse n x n) replace the kNN
+    graphs the geodesics run on; a stack needs edges between its sections, which a plain
+    kNN graph does not give when the sections are further apart than the bins.
+    Unbalanced GW: pass tau_a / tau_b in gw_params.
     """
     xs, xs2 = pre["xs"], pre["xs2"]
     M = pre.get("M") if fused_alpha > 0 else None
@@ -220,8 +236,8 @@ def mgw_align_core(
 
     xs_t, xs2_t = torch.from_numpy(xs).to(device), torch.from_numpy(xs2).to(device)
     ys_t, ys2_t = torch.from_numpy(X_rep).to(device), torch.from_numpy(Z_rep).to(device)
-    dim_e, dim_f_M, dim_f_N = 2, ys_t.shape[1], ys2_t.shape[1]
-    if verbose: print(f"[mgw.core] dims: E=2, F_M={dim_f_M}, F_N={dim_f_N}")
+    dim_e_M, dim_e_N, dim_f_M, dim_f_N = xs.shape[1], xs2.shape[1], ys_t.shape[1], ys2_t.shape[1]
+    if verbose: print(f"[mgw.core] dims: E_M={dim_e_M}, E_N={dim_e_N}, F_M={dim_f_M}, F_N={dim_f_N}")
 
     # φ, ψ
     if seed is not None:
@@ -231,8 +247,8 @@ def mgw_align_core(
         os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
         torch.use_deterministic_algorithms(True)
         if verbose: print("[mgw.core] deterministic training (fused Adam, deterministic kernels)")
-    phi = models.PhiModel(2, dim_f_M, widths=widths).to(device)
-    psi = models.PhiModel(2, dim_f_N, widths=widths).to(device)
+    phi = models.PhiModel(dim_e_M, dim_f_M, widths=widths).to(device)
+    psi = models.PhiModel(dim_e_N, dim_f_N, widths=widths).to(device)
 
     phi_path = psi_path = None
     if save_dir:
@@ -267,8 +283,8 @@ def mgw_align_core(
     G_M = geometry.pullback_metric_field(phi, torch.from_numpy(xs).to(device),  eps=geodesic_eps).cpu()
     G_N = geometry.pullback_metric_field(psi, torch.from_numpy(xs2).to(device), eps=geodesic_eps).cpu()
 
-    Gs = geometry.knn_graph(xs,  k=knn_k)
-    Gt = geometry.knn_graph(xs2, k=knn_k)
+    Gs = pre["graph_M"] if pre.get("graph_M") is not None else geometry.knn_graph(xs,  k=knn_k)
+    Gt = pre["graph_N"] if pre.get("graph_N") is not None else geometry.knn_graph(xs2, k=knn_k)
     D_M = geometry.geodesic_distances_fast(xs,  G_M, Gs)
     D_N = geometry.geodesic_distances_fast(xs2, G_N, Gt)
 
