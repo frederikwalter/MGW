@@ -75,7 +75,8 @@ def restrict_to_orthologs(genes_human, genes_mouse, table):
     return hit.human.to_numpy(), hit.mouse.to_numpy()
 
 
-def shared_embedding(A, B, table=None, n_hvg=2000, n_comps=30, exclude=None, groups_A=None, groups_B=None):
+def shared_embedding(A, B, table=None, n_hvg=2000, n_comps=30, exclude=None, groups_A=None, groups_B=None,
+                     random_state=0):
     """Embed two log-normalized sections in one space spanned by matched genes.
 
     With `table` (a load_one2one frame) A is human and B mouse, and genes are matched through the
@@ -85,6 +86,8 @@ def shared_embedding(A, B, table=None, n_hvg=2000, n_comps=30, exclude=None, gro
     sections are then projected on a joint PCA. `groups_A` / `groups_B` (one label per row, e.g. the
     section of each point when A or B holds several sections) z-score within each group instead, which
     also removes offsets between the sections of a stack.
+
+    random_state seeds the randomized PCA.
 
     Returns (EA, EB, genes): the embeddings (n_A x n_comps, n_B x n_comps) and the genes used (A's names).
     """
@@ -121,6 +124,6 @@ def shared_embedding(A, B, table=None, n_hvg=2000, n_comps=30, exclude=None, gro
 
     J = np.vstack([zscore(XA[:, keep], groups_A), zscore(XB[:, keep], groups_B)])
     J -= J.mean(0)
-    U, S, _ = randomized_svd(J, n_components=n_comps, random_state=0)
+    U, S, _ = randomized_svd(J, n_components=n_comps, random_state=random_state)
     E = (U[:, :n_comps] * S[:n_comps]).astype(np.float64)
     return E[:A.n_obs], E[A.n_obs:], np.asarray(ga)[keep]

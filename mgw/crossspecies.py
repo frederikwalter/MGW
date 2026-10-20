@@ -104,8 +104,11 @@ def embryo_sections(scores, dataset, stage, embryo):
     return [key_name(k) for k in s.index]
 
 
-def load_section(dataset, sec, path, *, max_obs, subsample="voronoi", agg="sum", lloyd_iter=3, drop_labels=()):
-    """Full section (drop_labels removed) and its reduction to max_obs points; full.obs['tile'] maps bins to points."""
+def load_section(dataset, sec, path, *, max_obs, subsample="voronoi", agg="sum", lloyd_iter=3, drop_labels=(),
+                 random_state=42):
+    """Full section (drop_labels removed) and its reduction to max_obs points; full.obs['tile'] maps bins to points.
+
+    random_state seeds the reduction (the Voronoi seeds), as in util.merge_bins."""
     adata = sc.read_h5ad(path)
     counts, label_col = ("counts", "celltype") if dataset == "HESTA" else ("count", "annotation")
     # HESTA X is log-normalized, MOSTA X is something else; both keep raw counts in a layer
@@ -125,7 +128,7 @@ def load_section(dataset, sec, path, *, max_obs, subsample="voronoi", agg="sum",
 
     method = subsample if max_obs else "random"
     out, tile = util.merge_bins(full, max_obs or full.n_obs, method=method, agg=agg, label_key="label_h",
-                                lloyd_iter=lloyd_iter)
+                                lloyd_iter=lloyd_iter, random_state=random_state)
     full.obs["tile"] = tile
     if method != "random":
         out.obs_names = f"{sec}_" + out.obs_names

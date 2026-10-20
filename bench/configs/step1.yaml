@@ -1,0 +1,85 @@
+# Step 1 of docs/st_3d_alignment_strategies.md §6: the 2D reference pipeline, its nulls and ceilings.
+# Run `python -m mgw.bench --config step1.yaml <command>`; any value can be overridden with
+# `--set group.key=value` (the override enters the hashes, so its results go to their own folders).
+name: step1
+series: series.yaml
+reference: reference.yaml
+
+reduce:
+  max_obs: 5000              # points per section (Voronoi-merged bins); the notebook used 1000
+  subsample: voronoi
+  agg: sum
+  lloyd_iter: 3
+  drop_labels: [Cavity, Extraembryonic Tissue]
+
+features:
+  pca_comp: 30
+  n_hvg: 2000
+  n_eval_genes: 500          # held-out 1:1 orthologs, never in the embedding
+  m_scale_quantile: 0.99     # the cross cost is cdist / this quantile (one per pair)
+  zscore_by: section         # genes z-scored per section; `embryo` keeps the depth offsets the 3D field needs (§1c)
+
+fgw:
+  alpha: 0.5                 # GW weight; 1 - alpha on the cross cost
+  epsilon: 5.0e-3
+  inner_maxit: 3000
+  outer_maxit: 200
+  inner_tol: 1.0e-7
+  outer_tol: 1.0e-7
+
+stack:                       # stack building: stage 1 of the volume approach (as in the 3D notebook)
+  order: auto                # file order for HESTA, inferred for MOSTA
+  pair_alpha: 0.8
+  pair_eps: 1.0e-2
+  icp_lambda: 0.5
+  icp_iter: 15
+  icp_eps: 5.0e-3
+  section_flip: auto
+  global_sweeps: 2
+
+pipelines:
+  # the reference: strategy A (best real section by the objective) with FGW; also scores the label oracle,
+  # the laterality partner, a random real section, rigid-only placement and the organ-frequency prior
+  A_fgw:
+    strategy: real2d
+    aligner: fgw
+    kinds: [cross, between, within]
+    store: {topk: true, dense: [selected, oracle], dense_kinds: [cross]}
+  # nulls over the same candidate grid, each selecting by its own objective
+  A_linear:                  # features only, no geometry
+    strategy: real2d
+    aligner: linear
+    store: {topk: false, dense: []}
+  A_spatialgw:               # geometry only, no features
+    strategy: real2d
+    aligner: spatial_gw
+    store: {topk: false, dense: []}
+  A_scot:                    # feature geometry only (SCOT)
+    strategy: real2d
+    aligner: scot
+    store: {topk: false, dense: []}
+
+metrics:
+  present_min_bins: 5        # an organ is present on a side with >= 5 bins (full resolution) ...
+  present_min_tiles: 1       # ... or >= 1 majority tile (reduced)
+  coverage_share: 0.1
+  foldover_k: 16             # neighbours of the local Jacobian fit (fold-overs)
+  topk: 64
+  presence: embryo           # K: organs of the query present in the whole target embryo, not just the target (§2a)
+
+guardrails:                  # report time only (not hashed)
+  regret_max: 0.05
+  foldover_max: 0.05
+  end_fraction: 0.34         # X6: the selected target must lie in this end of the target stack (by L) ...
+  end_pass_share: 0.75       # ... for this share of the queries
+
+noise:                       # the noise margin: factor x the SD over seeds of the pair-level kappa_bal
+  pipeline: A_fgw
+  tier: dev
+  factor: 2.0
+
+seeds:
+  smoke: [0]
+  dev: [0, 1, 2, 3, 4]
+  screen: [0]
+  full: [0]

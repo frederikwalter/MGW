@@ -1,0 +1,660 @@
+[start Tue Oct 20 06:18:49 PM CEST 2026 host=lrz-hgx-h100-022 job=5862409 commit=5baf21a cpus=24 gpus=0]
+NVIDIA H100, 95830 MiB, 580.173.02
+ec692afb4c45be89 nvcr.io#nvidia/cuda:12.4.1-base-ubuntu22.04
+torch 2.14.0+cu130 cuda 13.0 available True
+NVIDIA H100
+jax 0.11.1 [CudaDevice(id=0)]
+=== human_stack ===
+=== mouse_stack ===
+[finished Tue Oct 20 07:40:58 PM CEST 2026 exit=0]
+Input Notebook:  human_mouse_align_3d.ipynb
+Output Notebook: /dss/dsshome1/00/ga79jin2/ai-runs/MGW/3d-cs20-e13.5/5862409/human_stack.ipynb
+Unable to parse line 34 'Z_GAPS        = None     # None: estimated; or n_sections - 1 gaps in stack units (a section's RMS radius = 1)'.
+Unable to parse line 42 'TAU_STACK    = 0.1       # direct 2D→3D FGW: relaxation of the stack marginal (1 = balanced)'.
+Unable to parse line 62 'GW_PARAMS    = dict(verbose=False, inner_maxit=3000, outer_maxit=3000, inner_tol=1e-7, outer_tol=1e-7, epsilon=1e-4)'.
+Unable to parse line 66 'HESTA_DIR = MOSTA_DIR = LATERALITY_DIR = ORTHOLOG_TSV = SAVE_DIR = None'.
+Passed unknown parameter: SAVE_DIR
+[IPKernelApp] WARNING | Kernel is running over TCP without encryption. All communication (including code and outputs) is sent in plain text and is susceptible to eavesdropping. Use IPC transport or launch with kernel manager-provisioned CurveZMQ keys to enable transport encryption.
+Executing notebook with kernel: python3
+Executing Cell 1---------------------------------------
+Ending Cell 1------------------------------------------
+Executing Cell 2---------------------------------------
+Ending Cell 2------------------------------------------
+Executing Cell 3---------------------------------------
+Ending Cell 3------------------------------------------
+Executing Cell 4---------------------------------------
+Ending Cell 4------------------------------------------
+Executing Cell 5---------------------------------------
+Device: cuda
+stack (HESTA CS20_E1, order 'file'): CS20_E1S1 (L 0.92), CS20_E1S2 (L 0.92), CS20_E1S3 (L 0.80), CS20_E1S4 (L 0.79), CS20_E1S5 (L 0.79), CS20_E1S6 (L 0.66), CS20_E1S7 (L 0.66)
+queries (MOSTA E13.5_E1): E13.5_E1S1 (L 0.04), E13.5_E1S2 (L 0.14), E13.5_E1S3 (L 0.04), E13.5_E1S4 (L 0.21)
+
+Ending Cell 5------------------------------------------
+Executing Cell 6---------------------------------------
+Ending Cell 6------------------------------------------
+Executing Cell 7---------------------------------------
+Ending Cell 7------------------------------------------
+Executing Cell 8---------------------------------------
+Ending Cell 8------------------------------------------
+Executing Cell 9---------------------------------------
+[CS20_E1S1] 160,302 bins (of 175,487, 15,185 dropped) x 47,415 genes -> 1,000 points (voronoi, sum); bins per point 160.3 (min 50, max 447), mean purity 0.796
+
+[CS20_E1S2] 179,385 bins (of 197,466, 18,081 dropped) x 47,736 genes -> 1,000 points (voronoi, sum); bins per point 179.4 (min 47, max 549), mean purity 0.758
+
+[CS20_E1S3] 177,086 bins (of 208,433, 31,347 dropped) x 47,415 genes -> 1,000 points (voronoi, sum); bins per point 177.1 (min 42, max 476), mean purity 0.744
+
+[CS20_E1S4] 197,529 bins (of 253,104, 55,575 dropped) x 48,540 genes -> 1,000 points (voronoi, sum); bins per point 197.5 (min 34, max 492), mean purity 0.761
+
+[CS20_E1S5] 223,716 bins (of 263,538, 39,822 dropped) x 46,473 genes -> 1,000 points (voronoi, sum); bins per point 223.7 (min 50, max 528), mean purity 0.801
+
+[CS20_E1S6] 206,161 bins (of 248,690, 42,529 dropped) x 51,890 genes -> 1,000 points (voronoi, sum); bins per point 206.2 (min 38, max 479), mean purity 0.820
+
+[CS20_E1S7] 209,832 bins (of 265,988, 56,156 dropped) x 52,248 genes -> 1,000 points (voronoi, sum); bins per point 209.8 (min 56, max 488), mean purity 0.809
+
+stack length unit: 12038.5 pixels (median RMS radius of a section)
+
+Ending Cell 9------------------------------------------
+Executing Cell 10--------------------------------------
+Ending Cell 10-----------------------------------------
+Executing Cell 11--------------------------------------
+ stack position   section  L_pair  L_raw
+              0 CS20_E1S1   0.920  0.841
+              1 CS20_E1S2   0.920  1.000
+              2 CS20_E1S3   0.800  0.800
+              3 CS20_E1S4   0.788  0.788
+              4 CS20_E1S5   0.788  0.789
+              5 CS20_E1S6   0.657  0.635
+              6 CS20_E1S7   0.657  0.680
+
+Ending Cell 11-----------------------------------------
+Executing Cell 12--------------------------------------
+Ending Cell 12-----------------------------------------
+Executing Cell 13--------------------------------------
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+                 pair  fgw_det  reflected     angle  shift   rmsd  icp_cost_rotation  icp_cost_reflection  icp_iters
+CS20_E1S1 → CS20_E1S2        1      False -175.3363 0.0009 0.1677             0.0793               0.2114          5
+CS20_E1S2 → CS20_E1S3        1      False  177.9565 0.0003 0.2114             0.1014               0.2332          8
+CS20_E1S3 → CS20_E1S4        1      False -177.6719 0.0005 0.2377             0.1217               0.2358          9
+CS20_E1S4 → CS20_E1S5        1      False -179.4925 0.0004 0.2704             0.1817               0.2545         13
+CS20_E1S5 → CS20_E1S6        1      False  -73.8099 0.0003 0.2756             0.1396               0.1863         10
+CS20_E1S6 → CS20_E1S7        1      False  157.8768 0.0008 0.2380             0.0824               0.1852          8
+
+<Figure size 1500x840 with 6 Axes>
+Ending Cell 13-----------------------------------------
+Executing Cell 14--------------------------------------
+Ending Cell 14-----------------------------------------
+Executing Cell 15--------------------------------------
+                 pair    gap       D  gamma_r  saturated  dL_raw  share_gap  share_dL
+CS20_E1S1 → CS20_E1S2 0.0715 23.2545  18.8180      False  0.1592     0.0864    0.2783
+CS20_E1S2 → CS20_E1S3 0.0779 24.2712  18.8444      False  0.1998     0.0942    0.3491
+CS20_E1S3 → CS20_E1S4 0.1457 32.1283  19.7280      False  0.0126     0.1761    0.0221
+CS20_E1S4 → CS20_E1S5 0.1817 35.4573  19.5015      False  0.0010     0.2196    0.0017
+CS20_E1S5 → CS20_E1S6 0.2011 37.5708  19.5733      False  0.1540     0.2431    0.2691
+CS20_E1S6 → CS20_E1S7 0.1495 32.5132  19.3794      False  0.0456     0.1806    0.0797
+z of the sections: {'CS20_E1S1': np.float64(0.0), 'CS20_E1S2': np.float64(0.071), 'CS20_E1S3': np.float64(0.149), 'CS20_E1S4': np.float64(0.295), 'CS20_E1S5': np.float64(0.477), 'CS20_E1S6': np.float64(0.678), 'CS20_E1S7': np.float64(0.827)}
+
+<Figure size 600x350 with 1 Axes>
+Ending Cell 15-----------------------------------------
+Executing Cell 16--------------------------------------
+Ending Cell 16-----------------------------------------
+Executing Cell 17--------------------------------------
+Ending Cell 17-----------------------------------------
+Executing Cell 18--------------------------------------
+Ending Cell 18-----------------------------------------
+Executing Cell 19--------------------------------------
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+           t_star  t_gaps  label_agree_best_t  median_r_best_t  label_agree_best_end  median_r_best_end
+section                                                                                                
+CS20_E1S2     0.3   0.478               0.629            0.617                 0.605              0.572
+CS20_E1S3     0.4   0.349               0.599            0.609                 0.582              0.515
+CS20_E1S4     0.5   0.445               0.510            0.554                 0.483              0.497
+CS20_E1S5     0.5   0.475               0.519            0.554                 0.516              0.495
+CS20_E1S6     0.9   0.574               0.596            0.677                 0.579              0.665
+
+<Figure size 1100x320 with 2 Axes>
+Ending Cell 19-----------------------------------------
+Executing Cell 20--------------------------------------
+saved the stack to /dss/dsshome1/00/ga79jin2/ai-runs/MGW/3d-cs20-e13.5/5862409/alignments
+
+Ending Cell 20-----------------------------------------
+Executing Cell 21--------------------------------------
+Ending Cell 21-----------------------------------------
+Executing Cell 22--------------------------------------
+[E13.5_E1S1] 64,299 bins (of 77,369, 13,070 dropped) x 28,408 genes -> 1,000 points (voronoi, sum); bins per point 64.3 (min 10, max 145), mean purity 0.845
+
+[E13.5_E1S2] 56,636 bins (of 64,584, 7,948 dropped) x 28,208 genes -> 1,000 points (voronoi, sum); bins per point 56.6 (min 13, max 138), mean purity 0.835
+
+[E13.5_E1S3] 71,911 bins (of 84,811, 12,900 dropped) x 27,841 genes -> 1,000 points (voronoi, sum); bins per point 71.9 (min 21, max 162), mean purity 0.831
+
+[E13.5_E1S4] 63,379 bins (of 73,168, 9,789 dropped) x 27,732 genes -> 1,000 points (voronoi, sum); bins per point 63.4 (min 11, max 171), mean purity 0.844
+
+14,863 1:1 orthologs in both; embedding on 2,428 genes; 500 evaluation genes
+
+Ending Cell 22-----------------------------------------
+Executing Cell 23--------------------------------------
+Ending Cell 23-----------------------------------------
+Executing Cell 24--------------------------------------
+Ending Cell 24-----------------------------------------
+Executing Cell 25--------------------------------------
+Ending Cell 25-----------------------------------------
+Executing Cell 26--------------------------------------
+[CS20_E1S2 (held out)] coarse plane z0 0.094 (stack 0.000–0.827), tilt -0.4°/+1.1°, planarity rms 0.090, det +1
+
+[CS20_E1S3 (held out)] coarse plane z0 0.124 (stack 0.000–0.827), tilt -2.2°/+3.7°, planarity rms 0.131, det +1
+
+[CS20_E1S4 (held out)] coarse plane z0 0.205 (stack 0.000–0.827), tilt -1.6°/+5.1°, planarity rms 0.180, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+              objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement      0.095      0.689          0.523     0.733              0.013
+
+[CS20_E1S5 (held out)] coarse plane z0 0.526 (stack 0.000–0.827), tilt -2.2°/-1.7°, planarity rms 0.218, det +1
+
+[CS20_E1S6 (held out)] coarse plane z0 0.744 (stack 0.000–0.827), tilt +2.5°/+1.5°, planarity rms 0.155, det +1
+
+  section  true_z  z0_scan  z0_sections  z0_coarse  t_true  t_scan  t_sections  t_star_loo  tilt  det  label_acc
+CS20_E1S2   0.071    0.059        0.000      0.094   0.478   0.396       0.000         0.3 +0/+0    1      0.746
+CS20_E1S3   0.149    0.118        0.137      0.124   0.349   0.209       0.292         0.4 +0/+0    1      0.734
+CS20_E1S4   0.295    0.207        0.223      0.205   0.445   0.175       0.223         0.5 +0/+0    1      0.689
+CS20_E1S5   0.477    0.561        0.605      0.526   0.475   0.696       0.810         0.5 +0/+0    1      0.651
+CS20_E1S6   0.678    0.768        0.827      0.744   0.574   0.831       1.000         0.9 +0/+0    1      0.753
+mean |z0 - true z| (scan): 0.061
+mean |z0 - true z| (sections): 0.087
+mean |z0 - true z| (coarse): 0.051
+mean |z of the nearest neighbour - true z|: 0.125
+
+Ending Cell 26-----------------------------------------
+Executing Cell 27--------------------------------------
+Ending Cell 27-----------------------------------------
+Executing Cell 28--------------------------------------
+[E13.5_E1S1] coarse plane z0 0.487 (stack 0.000–0.827), tilt -0.6°/-6.1°, planarity rms 0.149, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+                               objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement                       0.182      0.654          0.581     0.500             -0.003
+L partner (CS20_E1S6)              0.198      0.499          0.560     0.493             -0.033
+best real section (CS20_E1S5)      0.183      0.664          0.587     0.502             -0.026
+
+[E13.5_E1S2] coarse plane z0 0.565 (stack 0.000–0.827), tilt +2.6°/-2.7°, planarity rms 0.127, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+                               objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement                       0.182      0.636          0.570     0.563             -0.013
+L partner (CS20_E1S6)              0.187      0.536          0.560     0.586             -0.040
+best real section (CS20_E1S5)      0.183      0.644          0.581     0.560             -0.018
+
+[E13.5_E1S3] coarse plane z0 0.543 (stack 0.000–0.827), tilt +1.3°/-6.5°, planarity rms 0.125, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+                               objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement                       0.182      0.670          0.597     0.562             -0.003
+L partner (CS20_E1S6)              0.190      0.498          0.545     0.567             -0.048
+best real section (CS20_E1S5)      0.183      0.675          0.602     0.569             -0.031
+
+[E13.5_E1S4] coarse plane z0 0.476 (stack 0.000–0.827), tilt -0.6°/-10.9°, planarity rms 0.181, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+                               objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement                       0.180      0.505          0.478     0.510             -0.000
+L partner (CS20_E1S6)              0.190      0.448          0.446     0.519             -0.026
+best real section (CS20_E1S5)      0.181      0.515          0.492     0.510             -0.012
+
+Ending Cell 28-----------------------------------------
+Executing Cell 29--------------------------------------
+Ending Cell 29-----------------------------------------
+Executing Cell 30--------------------------------------
+Ending Cell 30-----------------------------------------
+Executing Cell 31--------------------------------------
+Ending Cell 31-----------------------------------------
+Executing Cell 32--------------------------------------
+     query  L_query    z0  z0_scan  z0_sections  theta_u  theta_v  coverage  edge  det nearest_section  label_acc  label_acc_full  coexpr_r  coexpr_r_full L_partner_section  L_partner_label_acc_full  L_partner_coexpr_r_full best_real_section_section  best_real_section_label_acc_full  best_real_section_coexpr_r_full
+E13.5_E1S1    0.035 0.477    0.477        0.529      0.0      0.0       1.0 False    1       CS20_E1S5      0.654           0.631     0.500          0.169         CS20_E1S6                     0.477                    0.165                 CS20_E1S5                             0.639                            0.170
+E13.5_E1S2    0.139 0.477    0.477        0.561      0.0      0.0       1.0 False    1       CS20_E1S5      0.636           0.606     0.563          0.234         CS20_E1S6                     0.526                    0.240                 CS20_E1S5                             0.613                            0.232
+E13.5_E1S3    0.041 0.477    0.477        0.550      0.0      0.0       1.0 False    1       CS20_E1S5      0.670           0.641     0.562          0.221         CS20_E1S6                     0.479                    0.221                 CS20_E1S5                             0.645                            0.222
+E13.5_E1S4    0.207 0.477    0.477        0.542      0.0      0.0       1.0 False    1       CS20_E1S5      0.505           0.501     0.510          0.165         CS20_E1S6                     0.435                    0.170                 CS20_E1S5                             0.512                            0.165
+
+Spearman between z0 and the E13.5_E1 file order: +nan (|rho| nan)
+implied order of the queries along the stack: ['E13.5_E1S1', 'E13.5_E1S2', 'E13.5_E1S3', 'E13.5_E1S4']
+
+/tmp/ipykernel_1828898/2578615683.py:9: ConstantInputWarning: An input array is constant; the correlation coefficient is not defined.
+  rho = spearmanr(summary.z0, [query_names.index(s) for s in summary["query"]])[0]
+
+appended to /dss/dsshome1/00/ga79jin2/ai-runs/MGW/3d-cs20-e13.5/5862409/alignments/stack3d_summary.csv
+
+Ending Cell 32-----------------------------------------
+Executing Cell 33--------------------------------------
+Ending Cell 33-----------------------------------------
+Executing Cell 34--------------------------------------
+CS20_E1: run both directions first
+E13.5_E1: run both directions first
+
+Ending Cell 34-----------------------------------------
+Input Notebook:  human_mouse_align_3d.ipynb
+Output Notebook: /dss/dsshome1/00/ga79jin2/ai-runs/MGW/3d-cs20-e13.5/5862409/mouse_stack.ipynb
+Unable to parse line 34 'Z_GAPS        = None     # None: estimated; or n_sections - 1 gaps in stack units (a section's RMS radius = 1)'.
+Unable to parse line 42 'TAU_STACK    = 0.1       # direct 2D→3D FGW: relaxation of the stack marginal (1 = balanced)'.
+Unable to parse line 62 'GW_PARAMS    = dict(verbose=False, inner_maxit=3000, outer_maxit=3000, inner_tol=1e-7, outer_tol=1e-7, epsilon=1e-4)'.
+Unable to parse line 66 'HESTA_DIR = MOSTA_DIR = LATERALITY_DIR = ORTHOLOG_TSV = SAVE_DIR = None'.
+Passed unknown parameter: SAVE_DIR
+[IPKernelApp] WARNING | Kernel is running over TCP without encryption. All communication (including code and outputs) is sent in plain text and is susceptible to eavesdropping. Use IPC transport or launch with kernel manager-provisioned CurveZMQ keys to enable transport encryption.
+Executing notebook with kernel: python3
+Executing Cell 1---------------------------------------
+Ending Cell 1------------------------------------------
+Executing Cell 2---------------------------------------
+Ending Cell 2------------------------------------------
+Executing Cell 3---------------------------------------
+Ending Cell 3------------------------------------------
+Executing Cell 4---------------------------------------
+Ending Cell 4------------------------------------------
+Executing Cell 5---------------------------------------
+Device: cuda
+stack (MOSTA E13.5_E1, order 'infer'): E13.5_E1S1 (L 0.04), E13.5_E1S2 (L 0.14), E13.5_E1S3 (L 0.04), E13.5_E1S4 (L 0.21)
+queries (HESTA CS20_E1): CS20_E1S1 (L 0.92), CS20_E1S2 (L 0.92), CS20_E1S3 (L 0.80), CS20_E1S4 (L 0.79), CS20_E1S5 (L 0.79), CS20_E1S6 (L 0.66), CS20_E1S7 (L 0.66)
+
+Ending Cell 5------------------------------------------
+Executing Cell 6---------------------------------------
+Ending Cell 6------------------------------------------
+Executing Cell 7---------------------------------------
+Ending Cell 7------------------------------------------
+Executing Cell 8---------------------------------------
+Ending Cell 8------------------------------------------
+Executing Cell 9---------------------------------------
+[E13.5_E1S1] 64,299 bins (of 77,369, 13,070 dropped) x 28,408 genes -> 1,000 points (voronoi, sum); bins per point 64.3 (min 10, max 145), mean purity 0.845
+
+[E13.5_E1S2] 56,636 bins (of 64,584, 7,948 dropped) x 28,208 genes -> 1,000 points (voronoi, sum); bins per point 56.6 (min 13, max 138), mean purity 0.835
+
+[E13.5_E1S3] 71,911 bins (of 84,811, 12,900 dropped) x 27,841 genes -> 1,000 points (voronoi, sum); bins per point 71.9 (min 21, max 162), mean purity 0.831
+
+[E13.5_E1S4] 63,379 bins (of 73,168, 9,789 dropped) x 27,732 genes -> 1,000 points (voronoi, sum); bins per point 63.4 (min 11, max 171), mean purity 0.844
+
+stack length unit: 117.5 pixels (median RMS radius of a section)
+
+Ending Cell 9------------------------------------------
+Executing Cell 10--------------------------------------
+Ending Cell 10-----------------------------------------
+Executing Cell 11--------------------------------------
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m400[0m, [1;36m400[0m[1m)[0m[1m][0m.                                            
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m400[0m, [1;36m400[0m[1m)[0m[1m][0m.                                            
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m400[0m, [1;36m400[0m[1m)[0m[1m][0m.                                            
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m400[0m, [1;36m400[0m[1m)[0m[1m][0m.                                            
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m400[0m, [1;36m400[0m[1m)[0m[1m][0m.                                            
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m400[0m, [1;36m400[0m[1m)[0m[1m][0m.                                            
+
+path length: inferred 0.4284, file order 0.4880
+ stack position    section  L_pair  L_raw
+              0 E13.5_E1S3   0.041  0.041
+              1 E13.5_E1S1   0.035  0.035
+              2 E13.5_E1S4   0.207  0.207
+              3 E13.5_E1S2   0.139  0.139
+
+<Figure size 450x400 with 2 Axes>
+Ending Cell 11-----------------------------------------
+Executing Cell 12--------------------------------------
+Ending Cell 12-----------------------------------------
+Executing Cell 13--------------------------------------
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+                   pair  fgw_det  reflected   angle  shift   rmsd  icp_cost_rotation  icp_cost_reflection  icp_iters
+E13.5_E1S3 → E13.5_E1S1        1      False 10.9650 0.0003 0.2114             0.0715               0.2585         10
+E13.5_E1S1 → E13.5_E1S4        1      False -5.1680 0.0001 0.2226             0.1249               0.2952         14
+E13.5_E1S4 → E13.5_E1S2        1      False 18.4516 0.0004 0.2149             0.0949               0.2892         13
+
+<Figure size 1500x420 with 3 Axes>
+Ending Cell 13-----------------------------------------
+Executing Cell 14--------------------------------------
+Ending Cell 14-----------------------------------------
+Executing Cell 15--------------------------------------
+                   pair    gap       D  gamma_r  saturated  dL_raw  share_gap  share_dL
+E13.5_E1S3 → E13.5_E1S1 0.1302 29.4305  18.8839      False  0.0060     0.3719    0.0243
+E13.5_E1S1 → E13.5_E1S4 0.0970 25.2557  18.7980      False  0.1719     0.2771    0.6979
+E13.5_E1S4 → E13.5_E1S2 0.1229 28.7529  18.8912      False  0.0684     0.3510    0.2778
+z of the sections: {'E13.5_E1S3': np.float64(0.0), 'E13.5_E1S1': np.float64(0.13), 'E13.5_E1S4': np.float64(0.227), 'E13.5_E1S2': np.float64(0.35)}
+
+<Figure size 600x350 with 1 Axes>
+Ending Cell 15-----------------------------------------
+Executing Cell 16--------------------------------------
+Ending Cell 16-----------------------------------------
+Executing Cell 17--------------------------------------
+Ending Cell 17-----------------------------------------
+Executing Cell 18--------------------------------------
+Ending Cell 18-----------------------------------------
+Executing Cell 19--------------------------------------
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+[34mINFO    [0m Normalizing spatial coordinates of `x`.                                                                   
+
+[34mINFO    [0m Normalizing spatial coordinates of `y`.                                                                   
+
+[34mINFO    [0m Solving `[1;36m1[0m` problems                                                                                      
+
+[34mINFO    [0m Solving problem OTProblem[1m[[0m[33mstage[0m=[32m'prepared'[0m, [33mshape[0m=[1m([0m[1;36m1000[0m, [1;36m1000[0m[1m)[0m[1m][0m.                                          
+
+            t_star  t_gaps  label_agree_best_t  median_r_best_t  label_agree_best_end  median_r_best_end
+section                                                                                                 
+E13.5_E1S1     0.5   0.573               0.629            0.606                 0.601              0.523
+E13.5_E1S4     0.5   0.441               0.608            0.600                 0.593              0.503
+
+<Figure size 1100x320 with 2 Axes>
+Ending Cell 19-----------------------------------------
+Executing Cell 20--------------------------------------
+saved the stack to /dss/dsshome1/00/ga79jin2/ai-runs/MGW/3d-cs20-e13.5/5862409/alignments
+
+Ending Cell 20-----------------------------------------
+Executing Cell 21--------------------------------------
+Ending Cell 21-----------------------------------------
+Executing Cell 22--------------------------------------
+[CS20_E1S1] 160,302 bins (of 175,487, 15,185 dropped) x 47,415 genes -> 1,000 points (voronoi, sum); bins per point 160.3 (min 50, max 447), mean purity 0.796
+
+[CS20_E1S2] 179,385 bins (of 197,466, 18,081 dropped) x 47,736 genes -> 1,000 points (voronoi, sum); bins per point 179.4 (min 47, max 549), mean purity 0.758
+
+[CS20_E1S3] 177,086 bins (of 208,433, 31,347 dropped) x 47,415 genes -> 1,000 points (voronoi, sum); bins per point 177.1 (min 42, max 476), mean purity 0.744
+
+[CS20_E1S4] 197,529 bins (of 253,104, 55,575 dropped) x 48,540 genes -> 1,000 points (voronoi, sum); bins per point 197.5 (min 34, max 492), mean purity 0.761
+
+[CS20_E1S5] 223,716 bins (of 263,538, 39,822 dropped) x 46,473 genes -> 1,000 points (voronoi, sum); bins per point 223.7 (min 50, max 528), mean purity 0.801
+
+[CS20_E1S6] 206,161 bins (of 248,690, 42,529 dropped) x 51,890 genes -> 1,000 points (voronoi, sum); bins per point 206.2 (min 38, max 479), mean purity 0.820
+
+[CS20_E1S7] 209,832 bins (of 265,988, 56,156 dropped) x 52,248 genes -> 1,000 points (voronoi, sum); bins per point 209.8 (min 56, max 488), mean purity 0.809
+
+14,863 1:1 orthologs in both; embedding on 2,428 genes; 500 evaluation genes
+
+Ending Cell 22-----------------------------------------
+Executing Cell 23--------------------------------------
+Ending Cell 23-----------------------------------------
+Executing Cell 24--------------------------------------
+Ending Cell 24-----------------------------------------
+Executing Cell 25--------------------------------------
+Ending Cell 25-----------------------------------------
+Executing Cell 26--------------------------------------
+[E13.5_E1S1 (held out)] coarse plane z0 0.133 (stack 0.000–0.350), tilt +2.4°/+3.4°, planarity rms 0.116, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+              objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement      0.096      0.758          0.742     0.751             -0.029
+
+[E13.5_E1S4 (held out)] coarse plane z0 0.221 (stack 0.000–0.350), tilt -2.0°/+0.0°, planarity rms 0.109, det +1
+
+   section  true_z  z0_scan  z0_sections  z0_coarse  t_true  t_scan  t_sections  t_star_loo  tilt  det  label_acc
+E13.5_E1S1   0.130    0.063         0.00      0.133   0.573   0.275         0.0         0.5 +0/+0    1      0.758
+E13.5_E1S4   0.227    0.288         0.35      0.221   0.441   0.716         1.0         0.5 +0/+0    1      0.636
+mean |z0 - true z| (scan): 0.064
+mean |z0 - true z| (sections): 0.127
+mean |z0 - true z| (coarse): 0.004
+mean |z of the nearest neighbour - true z|: 0.097
+
+Ending Cell 26-----------------------------------------
+Executing Cell 27--------------------------------------
+Ending Cell 27-----------------------------------------
+Executing Cell 28--------------------------------------
+[CS20_E1S1] coarse plane z0 0.204 (stack 0.000–0.350), tilt -0.9°/+0.3°, planarity rms 0.064, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+                                objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement                        0.203      0.288          0.375     0.327              0.025
+L partner (E13.5_E1S4)              0.204      0.293          0.377     0.327             -0.035
+best real section (E13.5_E1S4)      0.204      0.293          0.377     0.327             -0.035
+
+[CS20_E1S2] coarse plane z0 0.208 (stack 0.000–0.350), tilt -1.4°/+0.0°, planarity rms 0.066, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+                                objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement                        0.208      0.342          0.444     0.327              0.029
+L partner (E13.5_E1S4)              0.209      0.345          0.443     0.324             -0.038
+best real section (E13.5_E1S4)      0.209      0.345          0.443     0.324             -0.038
+
+[CS20_E1S3] coarse plane z0 0.200 (stack 0.000–0.350), tilt -1.1°/-0.4°, planarity rms 0.066, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+                                objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement                        0.208      0.362          0.367     0.367              0.032
+L partner (E13.5_E1S4)              0.208      0.358          0.360     0.362             -0.037
+best real section (E13.5_E1S4)      0.208      0.358          0.360     0.362             -0.037
+
+[CS20_E1S4] coarse plane z0 0.197 (stack 0.000–0.350), tilt -1.6°/+0.8°, planarity rms 0.078, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+                                objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement                        0.205      0.496          0.585     0.442             -0.006
+L partner (E13.5_E1S4)              0.207      0.380          0.499     0.424             -0.038
+best real section (E13.5_E1S4)      0.207      0.380          0.499     0.424             -0.038
+
+[CS20_E1S5] coarse plane z0 0.195 (stack 0.000–0.350), tilt -1.4°/+0.7°, planarity rms 0.078, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+                                objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement                        0.178      0.583          0.563     0.581              0.023
+L partner (E13.5_E1S4)              0.183      0.446          0.481     0.558             -0.026
+best real section (E13.5_E1S4)      0.183      0.446          0.481     0.558             -0.026
+
+[CS20_E1S6] coarse plane z0 0.212 (stack 0.000–0.350), tilt -1.0°/+0.2°, planarity rms 0.096, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+                                objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement                        0.170      0.459          0.476     0.613             -0.054
+L partner (E13.5_E1S4)              0.172      0.469          0.491     0.587             -0.028
+best real section (E13.5_E1S4)      0.172      0.469          0.491     0.587             -0.028
+
+[CS20_E1S7] coarse plane z0 0.209 (stack 0.000–0.350), tilt -0.7°/+0.1°, planarity rms 0.097, det +1
+
+<Figure size 1800x360 with 5 Axes>
+<Figure size 1500x450 with 3 Axes>
+<Figure size 1100x500 with 1 Axes>
+                                objective  label_acc  label_bal_acc  coexpr_r  coexpr_r_shuffled
+3D placement                        0.185      0.380          0.473     0.575             -0.037
+L partner (E13.5_E1S4)              0.187      0.387          0.475     0.565             -0.026
+best real section (E13.5_E1S4)      0.187      0.387          0.475     0.565             -0.026
+
+Ending Cell 28-----------------------------------------
+Executing Cell 29--------------------------------------
+Ending Cell 29-----------------------------------------
+Executing Cell 30--------------------------------------
+Ending Cell 30-----------------------------------------
+Executing Cell 31--------------------------------------
+Ending Cell 31-----------------------------------------
+Executing Cell 32--------------------------------------
+    query  L_query    z0  z0_scan  z0_sections  theta_u  theta_v  coverage  edge  det nearest_section  label_acc  label_acc_full  coexpr_r  coexpr_r_full L_partner_section  L_partner_label_acc_full  L_partner_coexpr_r_full best_real_section_section  best_real_section_label_acc_full  best_real_section_coexpr_r_full
+CS20_E1S1    0.920 0.227    0.227        0.225      0.0      0.0     0.988 False    1      E13.5_E1S4      0.288           0.276     0.327          0.057        E13.5_E1S4                     0.277                    0.057                E13.5_E1S4                             0.277                            0.057
+CS20_E1S2    0.920 0.227    0.227        0.223      0.0      0.0     0.988 False    1      E13.5_E1S4      0.342           0.320     0.327          0.057        E13.5_E1S4                     0.321                    0.057                E13.5_E1S4                             0.321                            0.057
+CS20_E1S3    0.800 0.227    0.227        0.224      0.0      0.0     0.988 False    1      E13.5_E1S4      0.362           0.346     0.367          0.068        E13.5_E1S4                     0.344                    0.067                E13.5_E1S4                             0.344                            0.067
+CS20_E1S4    0.788 0.215    0.215        0.225      0.0     15.0     0.680 False    1      E13.5_E1S4      0.496           0.462     0.442          0.097        E13.5_E1S4                     0.360                    0.092                E13.5_E1S4                             0.360                            0.092
+CS20_E1S5    0.788 0.188    0.188        0.224      0.0    -15.0     0.683 False    1      E13.5_E1S4      0.583           0.555     0.581          0.113        E13.5_E1S4                     0.437                    0.105                E13.5_E1S4                             0.437                            0.105
+CS20_E1S6    0.657 0.263    0.263        0.255      0.0      0.0     0.988 False    1      E13.5_E1S4      0.459           0.451     0.613          0.159        E13.5_E1S4                     0.459                    0.153                E13.5_E1S4                             0.459                            0.153
+CS20_E1S7    0.657 0.238    0.238        0.247      0.0      0.0     0.988 False    1      E13.5_E1S4      0.380           0.393     0.575          0.135        E13.5_E1S4                     0.400                    0.133                E13.5_E1S4                             0.400                            0.133
+
+Spearman between z0 and the CS20_E1 file order: +0.33 (|rho| 0.33)
+implied order of the queries along the stack: ['CS20_E1S5', 'CS20_E1S4', 'CS20_E1S2', 'CS20_E1S1', 'CS20_E1S3', 'CS20_E1S7', 'CS20_E1S6']
+appended to /dss/dsshome1/00/ga79jin2/ai-runs/MGW/3d-cs20-e13.5/5862409/alignments/stack3d_summary.csv
+
+Ending Cell 32-----------------------------------------
+Executing Cell 33--------------------------------------
+Ending Cell 33-----------------------------------------
+Executing Cell 34--------------------------------------
+CS20_E1: stack order ['CS20_E1S1', 'CS20_E1S2', 'CS20_E1S3', 'CS20_E1S4', 'CS20_E1S5', 'CS20_E1S6', 'CS20_E1S7']
+         placed in the other stack: ['CS20_E1S5', 'CS20_E1S4', 'CS20_E1S2', 'CS20_E1S1', 'CS20_E1S3', 'CS20_E1S7', 'CS20_E1S6']  (|Spearman| 0.33)
+E13.5_E1: stack order ['E13.5_E1S3', 'E13.5_E1S1', 'E13.5_E1S4', 'E13.5_E1S2']
+          placed in the other stack: ['E13.5_E1S3', 'E13.5_E1S1', 'E13.5_E1S4', 'E13.5_E1S2']  (|Spearman| nan)
+
+/tmp/ipykernel_1928353/2274728807.py:12: ConstantInputWarning: An input array is constant; the correlation coefficient is not defined.
+  rho = spearmanr([stack_order.index(s) for s in common], placed.set_index("query").loc[common, "z0"])[0] if len(common) > 2 else np.nan
+
+Ending Cell 34-----------------------------------------

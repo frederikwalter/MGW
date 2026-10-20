@@ -462,9 +462,10 @@ def plane_from_coupling(xyz, P, frame, section=None):
 
 
 # ---------- features
-def joint_embedding(ln_list, n_hvg=2000, n_comps=30, exclude=None):
+def joint_embedding(ln_list, n_hvg=2000, n_comps=30, exclude=None, random_state=0):
     """One embedding for log-normalized sections of one species: the n_hvg most variable shared genes of
-    each section (minus `exclude`), z-scored within each section, then a joint PCA. Returns a list of arrays."""
+    each section (minus `exclude`), z-scored within each section, then a joint PCA (seeded by random_state).
+    Returns a list of arrays."""
     from sklearn.utils.extmath import randomized_svd
 
     genes = ln_list[0].var_names
@@ -484,6 +485,6 @@ def joint_embedding(ln_list, n_hvg=2000, n_comps=30, exclude=None):
         Z.append((X - X.mean(0)) / (X.std(0) + 1e-6))
     J = np.vstack(Z)
     J -= J.mean(0)
-    U, S, _ = randomized_svd(J, n_components=n_comps, random_state=0)
+    U, S, _ = randomized_svd(J, n_components=n_comps, random_state=random_state)
     E = (U * S).astype(np.float64)
     return np.split(E, np.cumsum([len(z) for z in Z])[:-1])

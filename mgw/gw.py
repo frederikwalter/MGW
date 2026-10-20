@@ -99,13 +99,28 @@ def solve_gw(C1, C2, a=None, b=None,
     '''
     return P
 
+_GW_SOLVERS = {}
+
+
+def _gw_solver(epsilon, inner_tol, outer_tol, inner_maxit, outer_maxit, jit):
+    """One (jitted) GW solver per setting: jax caches its compilation per input shape, so repeated solves of the
+    same size compile once instead of on every call."""
+    key = (float(epsilon), float(inner_tol), float(outer_tol), int(inner_maxit), int(outer_maxit), bool(jit))
+    if key not in _GW_SOLVERS:
+        lin = Sinkhorn(max_iterations=inner_maxit, threshold=inner_tol)
+        gw = GromovWasserstein(linear_solver=lin, epsilon=epsilon, max_iterations=outer_maxit, threshold=outer_tol)
+        _GW_SOLVERS[key] = jax.jit(gw) if jit else gw
+    return _GW_SOLVERS[key]
+
+
 def solve_gw_ott(C1, C2, a=None, b=None,
                         epsilon=1e-2, inner_tol=1e-7, outer_tol=1e-7,
                          tau_a=1, tau_b=1,
                         inner_maxit=4000, outer_maxit=1000, verbose=True,
-                         jit=True, M=None, alpha=1.0):
+                         jit=True, M=None, alpha=1.0, return_info=False):
     """Entropic GW between C1 and C2. With a cross cost M (n1 x n2) it is fused GW,
-    with alpha weighting the linear term <M, P> against the quadratic one."""
+    with alpha weighting the linear term <M, P> against the quadratic one.
+    return_info=True returns (P, info) with the solver's convergence flag and number of outer iterations."""
     n1 = C1.shape[0]
     n2 = C2.shape[0]
     
@@ -129,16 +144,17 @@ def solve_gw_ott(C1, C2, a=None, b=None,
     prob = quadratic_problem.QuadraticProblem(geom_x, geom_y, geom_xy=geom_xy, fused_penalty=alpha,
                                               a=a_j, b=b_j, tau_a=tau_a, tau_b=tau_b)
     
-    # Inner linear solver + outer GW solver
-    lin = Sinkhorn(max_iterations=inner_maxit, threshold=inner_tol)
-    gw  = GromovWasserstein(linear_solver=lin, epsilon=epsilon,
-                            max_iterations=outer_maxit, threshold=outer_tol)
-    
-    if jit:
-        gw = jax.jit(gw)
-    
-    out = gw(prob)
+    out = _gw_solver(epsilon, inner_tol, outer_tol, inner_maxit, outer_maxit, jit)(prob)
     P = np.array(out.matrix)
+    if return_info:
+        costs = np.asarray(out.costs)
+        done = costs[costs != -1]
+        lin = np.asarray(out.linear_convergence)[:len(done)]
+        # OTT's flag needs the outer loop to stop before max_iterations *and* every inner Sinkhorn to converge
+        return P, dict(converged=bool(out.converged), n_outer=int(len(done)),
+                       outer_stopped=bool(len(done) < outer_maxit),
+                       inner_converged=float(np.mean(lin)) if len(lin) else float("nan"),
+                       reg_cost=float(done[-1]) if len(done) else float("nan"))
     
     '''
     # Diagnostics (POT’s explicit GW loss; optional)

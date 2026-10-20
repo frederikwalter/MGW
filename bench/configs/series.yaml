@@ -1,0 +1,65 @@
+# Benchmark series: docs/st_3d_alignment_strategies.md §4.
+# Section lists are frozen here (resolved once from laterality/laterality_scores.csv with
+# crossspecies.embryo_sections, file order), so every step of the benchmark uses the same sections.
+# L ranges in the comments are L_pair. W (leave-one-out within an embryo) is generated for every
+# embryo of the cross pairs, in the tiers of those pairs.
+
+embryos:
+  # ---- human (HESTA)
+  CS12-13_E1: {dataset: HESTA, stage: CS12-13, sections: [CS12-13_E1S1, CS12-13_E1S2, CS12-13_E1S3, CS12-13_E1S4]}
+  CS12-13_E2: {dataset: HESTA, stage: CS12-13, sections: [CS12-13_E2S1, CS12-13_E2S2, CS12-13_E2S3, CS12-13_E2S4,
+                                                         CS12-13_E2S5, CS12-13_E2S6, CS12-13_E2S7, CS12-13_E2S8]}
+  CS14-15_E2: {dataset: HESTA, stage: CS14-15, sections: [CS14-15_E2S1, CS14-15_E2S2, CS14-15_E2S3, CS14-15_E2S4,
+                                                         CS14-15_E2S5, CS14-15_E2S6, CS14-15_E2S7, CS14-15_E2S8,
+                                                         CS14-15_E2S9, CS14-15_E2S10]}
+  CS14-15_E3: {dataset: HESTA, stage: CS14-15, sections: [CS14-15_E3S1, CS14-15_E3S2, CS14-15_E3S3, CS14-15_E3S4]}
+  CS17_E1:    {dataset: HESTA, stage: CS17, sections: [CS17_E1S1, CS17_E1S2, CS17_E1S3, CS17_E1S4, CS17_E1S5,
+                                                       CS17_E1S6, CS17_E1S7, CS17_E1S8, CS17_E1S9, CS17_E1S10]}
+  CS18_E1:    {dataset: HESTA, stage: CS18, sections: [CS18_E1S1, CS18_E1S2, CS18_E1S3, CS18_E1S4, CS18_E1S5, CS18_E1S6]}
+  CS20_E2:    {dataset: HESTA, stage: CS20, sections: [CS20_E2S1, CS20_E2S2, CS20_E2S3, CS20_E2S4]}
+  CS23_E1:    {dataset: HESTA, stage: CS23, sections: [CS23_E1S1, CS23_E1S2, CS23_E1S3]}
+  CS23_E2:    {dataset: HESTA, stage: CS23, sections: [CS23_E2S1, CS23_E2S2, CS23_E2S3, CS23_E2S4, CS23_E2S5,
+                                                       CS23_E2S6, CS23_E2S7, CS23_E2S8, CS23_E2S9, CS23_E2S10]}
+  # ---- mouse (MOSTA)
+  E9.5_E1:    {dataset: MOSTA, stage: E9.5, sections: [E9.5_E1S1]}
+  E9.5_E2:    {dataset: MOSTA, stage: E9.5, sections: [E9.5_E2S1, E9.5_E2S2, E9.5_E2S3, E9.5_E2S4]}
+  E10.5_E1:   {dataset: MOSTA, stage: E10.5, sections: [E10.5_E1S1, E10.5_E1S2, E10.5_E1S3]}
+  E11.5_E1:   {dataset: MOSTA, stage: E11.5, sections: [E11.5_E1S1, E11.5_E1S2, E11.5_E1S3, E11.5_E1S4]}
+  E12.5_E1:   {dataset: MOSTA, stage: E12.5, sections: [E12.5_E1S1, E12.5_E1S2, E12.5_E1S3, E12.5_E1S4, E12.5_E1S5]}
+  E12.5_E2:   {dataset: MOSTA, stage: E12.5, sections: [E12.5_E2S1]}
+  E13.5_E1:   {dataset: MOSTA, stage: E13.5, sections: [E13.5_E1S1, E13.5_E1S2, E13.5_E1S3, E13.5_E1S4]}
+  E14.5_E1:   {dataset: MOSTA, stage: E14.5, sections: [E14.5_E1S1, E14.5_E1S2, E14.5_E1S3, E14.5_E1S4, E14.5_E1S5]}
+  E14.5_E2:   {dataset: MOSTA, stage: E14.5, sections: [E14.5_E2S1, E14.5_E2S2]}
+  # ---- smoke test: the sections on the local machine (not real embryos)
+  smoke_H:    {dataset: HESTA, stage: CS12-13, sections: [CS12-13_E1S3, CS12-13_E2S6]}
+  smoke_M:    {dataset: MOSTA, stage: E9.5, sections: [E9.5_E1S1, E9.5_E2S1]}
+  smoke_H1:   {dataset: HESTA, stage: CS12-13, sections: [CS12-13_E1S3]}
+  smoke_H2:   {dataset: HESTA, stage: CS12-13, sections: [CS12-13_E2S6]}
+
+pairs:
+  # ---- 2a: cross-species (a = human, b = mouse; both stacks, both directions)
+  X1: {kind: cross, a: CS12-13_E2, b: E9.5_E2, stage: early, overlap: partial, ceiling: H1,
+       tiers: [dev, screen, full], note: "human 0.33-0.53, mouse 0.48-0.59; smallest sections"}
+  X2: {kind: cross, a: CS14-15_E2, b: E10.5_E1, stage: early, overlap: mouse inside human, ceiling: H2,
+       tiers: [screen, full], note: "human 0.05-0.79, mouse 0.07-0.35; the midline anchor"}
+  X3: {kind: cross, a: CS17_E1, b: E11.5_E1, stage: mid (ambiguous), overlap: mouse inside human,
+       tiers: [screen, full], note: "human 0.47-1.00, mouse 0.71-0.77; thin mouse stack"}
+  X4: {kind: cross, a: CS18_E1, b: E12.5_E1, stage: mid, overlap: human inside mouse (mouse gap 0.12-0.75),
+       ceiling: M2, tiers: [dev, screen, full], note: "the development pair"}
+  X5: {kind: cross, a: CS23_E2, b: E14.5_E1, stage: late, overlap: good, ceiling: H3,
+       tiers: [screen, full], note: "human 0.39-0.79, mouse 0.47-0.83; largest sections"}
+  X6: {kind: cross, a: CS20_E2, b: E13.5_E1, stage: late, overlap: none, guardrail: end_of_stack,
+       tiers: [screen, full], note: "negative control: human 0.27-0.76, mouse 0.04-0.21"}
+  # ---- 2b: same-species ceilings between embryos
+  H1: {kind: between, a: CS12-13_E1, b: CS12-13_E2, tiers: [screen, full], note: "matches X1"}
+  H2: {kind: between, a: CS14-15_E3, b: CS14-15_E2, tiers: [screen, full], note: "matches X2"}
+  H3: {kind: between, a: CS23_E1, b: CS23_E2, tiers: [full], note: "matches X5"}
+  M1: {kind: between, a: E9.5_E1, b: E9.5_E2, tiers: [full], note: "matches X1; one query section"}
+  M2: {kind: between, a: E12.5_E2, b: E12.5_E1, tiers: [screen, full], note: "matches X4; E12.5_E2S1 (L 0.12)"}
+  M3: {kind: between, a: E14.5_E2, b: E14.5_E1, tiers: [full], note: "matches X5; check the organ labels first"}
+  # ---- 2c: timing controls (same species, adjacent stages; diagnostics)
+  T1: {kind: between, a: CS17_E1, b: CS18_E1, tiers: [full], note: "timing control for X3/X4 (human)"}
+  T2: {kind: between, a: E11.5_E1, b: E12.5_E1, tiers: [full], note: "timing control for X3/X4 (mouse)"}
+  # ---- smoke test (local files)
+  S_X: {kind: cross, a: smoke_H, b: smoke_M, ceiling: S_H, tiers: [smoke], note: "smoke test"}
+  S_H: {kind: between, a: smoke_H1, b: smoke_H2, tiers: [smoke], note: "smoke test"}
