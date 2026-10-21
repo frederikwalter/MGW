@@ -9,6 +9,7 @@ Commands (in the order of a run):
   report      the Go table, guardrails, viewers and PNG sheets
   view        one viewer (pair, seed)
   promote     make a pipeline the reference (the old one goes to the history)
+  gates       g1 | g2: the within-species gates for the field (doc §3; config gates.yaml)
 
 Caches and results live under --root, $MGW_BENCH_DIR, or <MGW data dir>/bench.
 """
@@ -183,6 +184,34 @@ def cmd_view(args):
     print(str(out))
 
 
+def cmd_gates(args):
+    """G1 / G2 on the gate embryos (doc §3): unit rows, the summary and the pass table under results/gates/."""
+    import pandas as pd
+    from mgw.bench import config, gates, prepare, series
+    cfg = config.load(args.config or "gates.yaml", args.set)
+    ser = series.load(cfg.series_path())
+    root = prepare.bench_root(args.root)
+    seeds = _list(args.seeds, int)
+    embryos = _list(args.embryos)
+    log(f"gate {args.gate} ({cfg.path.name}): embryos {embryos or list(cfg.raw['gates']['embryos'])}, "
+        f"seeds {seeds if seeds is not None else cfg.raw['seeds']['dev']}, root {root}")
+    rows, summ, sel = gates.run(cfg, ser, root, args.gate, embryos=embryos, seeds=seeds, grid=not args.no_grid,
+                                force=args.force, log=log)
+    out = root / "results" / "gates" / f"{cfg.raw['name']}_{args.gate}"
+    with pd.option_context("display.width", 200, "display.max_columns", 30, "display.float_format", "{:.3f}".format):
+        if args.gate == "g1":
+            print("\nG1 per embryo (mean r_heldout of each predictor; pass: field > nearest + margin, >= McCann - "
+                  "margin):")
+            print(summ.to_string(index=False) if len(summ) else "no results")
+            print("\nG1 settings, best first (score: mean r_heldout of the field over the embryos, label-free):")
+            print(sel.to_string(index=False) if sel is not None and len(sel) else "no results")
+        else:
+            print("\nG2 per embryo and variant (errors in mean section spacings; pass: med3d < 0.5, lock <= 1.5 x "
+                  "chance, field < point cloud):")
+            print(summ.to_string(index=False) if len(summ) else "no results")
+    log(f"tables -> {out}")
+
+
 def cmd_promote(args):
     import yaml
     cfg, ser, root = _context(args)
@@ -203,7 +232,8 @@ def cmd_promote(args):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m mgw.bench", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--config", default="step1.yaml", help="YAML config (path, or name in bench/configs)")
+    ap.add_argument("--config", default=None,
+                    help="YAML config (path, or name in bench/configs); default step1.yaml, gates.yaml for `gates`")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="override a config value")
     ap.add_argument("--root", default=None, help="cache and results root (default $MGW_BENCH_DIR or <data>/bench)")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -235,6 +265,11 @@ def main(argv=None):
     p.add_argument("--out"); p.set_defaults(fn=cmd_view)
     p = sub.add_parser("promote"); p.add_argument("pipeline"); p.add_argument("--note")
     p.set_defaults(fn=cmd_promote)
+    p = sub.add_parser("gates", help="G1 / G2 (default config: gates.yaml)")
+    p.add_argument("gate", choices=["g1", "g2"])
+    p.add_argument("--embryos", help="default: gates.embryos of the config"); p.add_argument("--seeds")
+    p.add_argument("--no-grid", action="store_true", help="G1: the config's own setting only")
+    p.add_argument("--force", action="store_true"); p.set_defaults(fn=cmd_gates)
     args = ap.parse_args(argv)
     args.fn(args)
 
