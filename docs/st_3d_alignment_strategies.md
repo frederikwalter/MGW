@@ -45,11 +45,18 @@ The notes run in this order:
 - **The objective and the labels can disagree.** Searching harder over an objective that ranks candidates differently from the labels made things worse: a lower FGW objective (0.172 vs 0.179) came with a worse label accuracy (0.53 vs 0.69). Every unsupervised choice therefore gets a regret guardrail (§2e).
 - **z is the least reliable axis.** The gaps are lower bounds, and a field inherits any spacing error. Euclidean distances are not invariant to stretching one axis, so the z-scale is an explicit parameter (§1e).
 
-**Status.** Step 1 of §6, the harness, is implemented in `mgw.bench`: metrics, series, the 2D reference A with its nulls and ceilings, and the report and viewer. This revision changes it as follows:
+**Status.** Step 1 of §6, the harness, is implemented in `mgw.bench`: metrics, series, the 2D reference A with its nulls and ceilings, and the report and viewer. The step-1 revision changed it as follows:
 - K now counts the organs of the whole target embryo (§2a);
 - fold-overs work for 3D targets;
 - genes can be z-scored per embryo instead of per section (§1c);
 - the pipelines of earlier strategies are gone.
+
+Steps 2 and 3 are implemented as code, with results pending:
+- the field (`mgw/bench/field.py`);
+- the gates G1 and G2 (`mgw/bench/gates.py`, `bench/configs/gates.yaml`, `python -m mgw.bench gates g1|g2`);
+- the volume pipelines V_fgw, V_linear, V_gw and PC_fgw (`mgw/bench/pipelines/volume.py`, `bench/configs/step3.yaml`).
+
+They are tested on a synthetic embryo pair only (`mgw/bench/synthetic.py`). No HESTA/MOSTA result exists yet. The choices made where these notes leave room are listed in §6a.
 
 ---
 
@@ -413,17 +420,89 @@ Each step says what tells us to continue.
    - This revision: K over the target embryo, fold-overs in 3D, the per-embryo z-scoring option, and no pipelines from earlier strategies.
    - Run A on Dev (5 seeds) for the noise margin, then on Screen.
    - *Go:* one table with κ_bal, oracle, nulls and ceilings for every pair.
-2. **Gates G1 and G2 on the Dev embryos** (CS18_E1, CS12-13_E2, E12.5_E1, E9.5_E2).
+2. **Gates G1 and G2 on the Dev embryos** (CS18_E1, CS12-13_E2, E12.5_E1, E9.5_E2). *Implemented (code only, results pending):* `python -m mgw.bench gates g1|g2` with `bench/configs/gates.yaml` (§6a).
    - Fit the field, choose its hyperparameters and the feature z-scoring by the label-free G1 score.
    - Rerun A on the chosen features, which then becomes the reference.
    - *Go:* the field passes G1 and G2. If it fails G1 but the point cloud passes G2, continue with the point-cloud ablation alone.
-3. **The volume pipeline with FGW on Dev (X1, X4), both directions.**
+3. **The volume pipeline with FGW on Dev (X1, X4), both directions.** *Implemented (code only, results pending):* V_fgw, the nulls V_linear and V_gw, and the point-cloud ablation PC_fgw, in `bench/configs/step3.yaml`. The report adds V, PC, dV and dPC against A, and `volumes.csv` (§6a).
    - Compare with A, with the point-cloud ablation and with the volume nulls.
    - Check rejected mass and the depth of the matched mass in X4.
    - *Go:* the rule of 2a on Dev, then on Screen.
 4. **Stage-2 ladder on fixed volumes:** Riemannian FGW and MGW, and the z-stretch scan with its regret check. External 3D tools enter here only after 5c.
 5. **Stage-1 registration screen** on G3 (W, G1, G2): OT-ICP against the methods of 5a that passed triage, then the downstream Δκ of the best one.
 6. **Full tier.** Cross the best stage-1 method with the best stage-2 method. These numbers are the benchmark: Δκ, wins, ceiling share and the guardrails.
+
+### 6a. Implementation of steps 2–3: choices where the notes leave room
+
+These are first choices. They are recorded so that results can be read against them. The hyperparameters are guesses, to be set by G1.
+
+**The field (§1c, `field.py`).**
+- **Network.** One MLP (width 128, depth 3) on anisotropic Fourier features (64 frequencies; σ_xy = 4 and σ_z = 1 cycles per stack radius) plus the raw coordinates. Two heads, f and the occupancy logit, share the trunk.
+- **Normalization.** Coordinates are centred and divided by the stack's in-plane RMS radius (one scale for every axis). Features are centred and divided by their RMS.
+- **Weights.** features 1, depth 1, occupancy 0.5, smoothness 1e-3.
+- **Displacement pairs.** They are sampled by mass, and every gap carries the same total weight.
+- **Occupancy.**
+  - *Negatives:* in-plane points farther than 2 spot spacings from their section's tissue, and gap points farther than 2 spacings from every segment of their gap. Segments are compared in-plane at the nearest of 9 levels of t.
+  - *Positives:* the spots, and segment points jittered in-plane by 0.5 spacings.
+- **Smoothness.** |J_f|²_F at the spot and segment points of each batch (three JVPs). The depth loss is one JVP along the segment.
+- **One field per pair, embryo and seed.** f regresses the pair's own embedding, so fields and volumes are cached per pair.
+
+**Sampling (§1d).**
+- The box is the spots' in-plane bounding box plus 2 spacings, times [z_first, z_last].
+- The stack's z (the variogram gaps) and xy share one unit, so Sobol points that are uniform in this box already give an isotropic density. No further z scaling is applied.
+- The reported spacing is h = (box volume × acceptance / N)^{1/3}.
+
+**Stage 2 (§1e, `volume.py`).**
+- **Cross cost.** `Task.cross_cost`, i.e. cdist divided by the pair's scale from the *real* features. The field features are not rescaled.
+- **Unbalancedness.** τ = 0.95 on both sides, i.e. ρ ≈ 0.1 at ε = 5e-3.
+- **NaN fallback.** OTT's unbalanced correction gives NaN at small ε and τ ≤ 0.9. The solve then falls back to no correction and records `ugw_fallback`.
+- **Nulls.** The same unbalanced solve with the features only (linear OT) or the geometry only (GW).
+- **Hook for step 4.** New aligners are dispatched on the pipeline's `aligner` key.
+
+**Back to the spots (§1f).**
+- **A_q.** Each real spot spreads over its 8 nearest samples, with Gaussian weights at the sample spacing.
+- **B_t.** Each target sample pools the bin counts of its 3 nearest real target spots, 1/3 each (compositions, one-hot labels, held-out genes and L).
+- **The point cloud (PC_fgw).**
+  - If there are more than N stack points, each section is subsampled in proportion to its spots.
+  - Masses are proportional to the slab, half the gap to each neighbour. An end section gets its inner half only, and slabs are floored at 5 % of the mean so a zero gap does not delete a section.
+  - A_q takes each spot to the nearest kept point of its own section (the identity when nothing is dropped), and B_t is the identity.
+- **Rows.** Role `selected`, target `volume` or `points`, `L_target` = the mass-weighted L reached.
+- **Extra columns.**
+  - `rejected_query`: 1 minus the mass ratio over the section's own samples. It is signed: negative means the unbalanced solve added mass.
+  - `rejected_side_*`: the rejected mass of each whole measure.
+  - `L_reached_rel`, `z_reached_rel`: where the matched mass lands in the target's L and depth ranges.
+  - `normal_dev_deg`, `order_rho`: the parallel-section check of §2d.
+- **X6 guardrail for the volumes.** A query section passes when `L_reached_rel` lies in the end fraction of the target's L range on the query embryo's side. The side is whichever embryo has the higher mean L.
+
+**G1 (§3, `gates.py`).**
+- **The stack without k is not re-registered.**
+  - The other sections keep their positions and z in the full stack's frame.
+  - k − 1 and k + 1 are joined by their direct coupling, as in `stack.loo_check`, cached once per embryo.
+  - Re-registering would move the frame, and k's spots would then need a registration against k's own data.
+- **Gene predictions.** The field predicts features, not genes. So every predictor's features go through one feature → held-out-gene kNN regressor (15 neighbours, distance-weighted), fitted on the real spots of the other sections.
+  - `r_heldout`, the median per-gene r over k's spots, is the selection score.
+  - Baselines that transport genes directly also report `r_direct`.
+  - The regressor applied to k's true features (`true_features`) is the ceiling of this path.
+- **"Matched through the coupling".** The McCann positions at k's gap fraction, but every value copied from the nearer endpoint of its segment, with no mixing.
+- **Label agreement.** A kNN classifier on the predicted features, and the transported labels for the baselines. It is reported only.
+- **Margin and pass rule.** The margin is 2 × the SD over seeds of the field's r_heldout per embryo; it is 0 with one seed. The field passes when Δ(field − nearest) > margin and Δ(field − McCann) ≥ −margin.
+- **Selection.** The grid (zscore_by × field settings) is ranked by the field's mean r_heldout over the embryos.
+- **Features.** Each embryo's field regresses the features of its stage-2 pair (CS18_E1 and E12.5_E1: X4; CS12-13_E2 and E9.5_E2: X1).
+
+**G2 (§3).**
+- **Scope.** Embryos with ≥ 4 sections (a 2/2 split at least).
+- **Units.** Errors are in units of the full stack's mean gap.
+- **What is scored.** The barycentric map of A_q P on the source half's *real spots* whose true z lies within the target half's depth range. This set is common to the field and the point cloud. The field also reports the error of its own samples.
+- **Locking.** The tolerance is ±10 % of the target half's mean spacing in the full frame. The chance share is computed from the plane layout (≈ 20 %). `lock_true` is the share an exact map would give (≈ 0 for interleaved halves).
+- **Re-estimated z.** `estimate_gaps` on each half's stack features, anchored at the half's first section, and carried back to the full frame through the half's own sections (piecewise linear).
+- **Pass.** Median 3D error < 0.5, locking ≤ 1.5 × chance, and a field error below the point cloud's.
+
+**Synthetic tests.**
+- On the synthetic pair the variogram underestimates the gaps, often to 0:
+  - the stack embedding is z-scored per section, which removes the depth offsets (§1c);
+  - cross-section neighbours sit closer in-plane than the variogram's first bin.
+- The synthetic stacks therefore use the true gaps.
+- The same bias may affect real stacks with small gaps; G2's re-estimated variant would show it.
 
 ---
 
