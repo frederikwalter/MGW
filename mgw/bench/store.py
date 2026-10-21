@@ -92,6 +92,16 @@ def write_scores(d, rows):
     return df
 
 
+def write_table(path, df):
+    """A DataFrame as CSV, written atomically (gate tables and summaries)."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.stem + f".tmp{os.getpid()}.csv")
+    pd.DataFrame(df).to_csv(tmp, index=False)
+    os.replace(tmp, path)
+    return path
+
+
 def savez(path, **arrays):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
