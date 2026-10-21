@@ -18,7 +18,8 @@ embryos:
   CS18_E1:    {dataset: HESTA, stage: CS18, sections: [CS18_E1S1, CS18_E1S2, CS18_E1S3, CS18_E1S4, CS18_E1S5, CS18_E1S6]}
   CS20_E2:    {dataset: HESTA, stage: CS20, sections: [CS20_E2S1, CS20_E2S2, CS20_E2S3, CS20_E2S4]}
   CS23_E1:    {dataset: HESTA, stage: CS23, sections: [CS23_E1S1, CS23_E1S2, CS23_E1S3]}
-  CS23_E2:    {dataset: HESTA, stage: CS23, sections: [CS23_E2S1, CS23_E2S2, CS23_E2S3, CS23_E2S4, CS23_E2S5,
+  # CS23_E2S2 and CS23_E2S4 are excluded: their h5ad files hold only log-normalized X (no counts layer, no raw)
+  CS23_E2:    {dataset: HESTA, stage: CS23, sections: [CS23_E2S1, CS23_E2S3, CS23_E2S5,
                                                        CS23_E2S6, CS23_E2S7, CS23_E2S8, CS23_E2S9, CS23_E2S10]}
   # ---- mouse (MOSTA)
   E9.5_E1:    {dataset: MOSTA, stage: E9.5, sections: [E9.5_E1S1]}

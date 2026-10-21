@@ -288,7 +288,7 @@ The field is tested within one species before any cross-species run. These tests
   - *re-estimated z:* each half re-estimates its gaps, which are twice as large and saturate more. This tests the gap estimates too.
 - Run the point-cloud ablation alongside. G2 shows directly whether raw stacks lock onto their planes and whether the field fixes that.
 - **Pass:** the median 3D error is below half a section spacing, there is no plane locking (share ≤ 1.5 × chance), and the field does better than the point cloud.
-- Embryos with ≥ 6 sections: CS12-13_E2 (8), CS14-15_E2 (10), CS17_E1 (10), CS18_E1 (6), CS23_E2 (10). Mouse stacks in the series have ≤ 5 sections (a 3/2 split). E16.5_E2 (13) is the only long mouse stack.
+- Embryos with ≥ 6 sections: CS12-13_E2 (8), CS14-15_E2 (10), CS17_E1 (10), CS18_E1 (6), CS23_E2 (8; S2 and S4 excluded, no raw counts). Mouse stacks in the series have ≤ 5 sections (a 3/2 split). E16.5_E2 (13) is the only long mouse stack.
 
 **G3. Stack building.** The registration of stage 1 is scored on W (A's within-embryo ceiling) and on G1 and G2. This is where alternative registration methods compete (§5a).
 
@@ -314,7 +314,7 @@ L is the laterality score from [`laterality/laterality_scores.csv`](../lateralit
 | X2 | CS14-15_E2 (10; 0.05–0.79) | E10.5_E1 (3; 0.07–0.35) | early | mouse inside human | The human stack spans midline to lateral; the only good midline anchor |
 | X3 | CS17_E1 (10; 0.47–1.00) | E11.5_E1 (4; 0.71–0.77) | mid (ambiguous window) | mouse inside human | A thin mouse volume (L range 0.06) |
 | X4 | CS18_E1 (6; 0.33–0.67) | E12.5_E1 (5; 0.10–0.81) | mid | human inside mouse, but mouse has a gap 0.12–0.75 | The development pair; the mouse volume in the gap is mostly prior |
-| X5 | CS23_E2 (10; 0.39–0.79) | E14.5_E1 (5; 0.47–0.83) | late | good | Late stage, largest sections (≈ 0.7M spots), the best depth match |
+| X5 | CS23_E2 (8; 0.39–0.79) | E14.5_E1 (5; 0.47–0.83) | late | good | Late stage, largest sections (≈ 0.7M spots), the best depth match |
 | X6 | CS20_E2 (4; 0.27–0.76) | E13.5_E1 (4; 0.04–0.21) | late | none | Negative control: the guardrail of 2a |
 
 ### 4b. Same-species ceilings
@@ -325,7 +325,7 @@ L is the laterality score from [`laterality/laterality_scores.csv`](../lateralit
 | S | Odd/even split of the long stacks (§3, G2) | within embryo | X1–X5 | volumes |
 | H1 | CS12-13_E1 (4) ↔ CS12-13_E2 (8) | between embryos, human | X1 | A, volumes |
 | H2 | CS14-15_E3 (4) ↔ CS14-15_E2 (10) | between embryos, human | X2 | A, volumes |
-| H3 | CS23_E1 (3) ↔ CS23_E2 (10) | between embryos, human | X5 | A, volumes |
+| H3 | CS23_E1 (3) ↔ CS23_E2 (8) | between embryos, human | X5 | A, volumes |
 | M1 | E9.5_E1S1 → E9.5_E2 | between embryos, mouse | X1 | A (one query section) |
 | M2 | E12.5_E2S1 → E12.5_E1 | between embryos, mouse | X4 | A (one query section) |
 | M3 | E14.5_E2 (2) → E14.5_E1 | between embryos, mouse | X5 | A, volumes (check the organ labels first) |
