@@ -6,9 +6,10 @@ confidence or the fold-overs. Below are the organ x organ matrix C of the shown 
 its spots) and the candidate grid of the direction (kappa_bal per query x target, selected and oracle marked), so the
 regret is visible at a glance.
 
-Embedded couplings: A_fgw selected / oracle / L_partner, as the top-k entries per row and per
-column (k_view of the stored top-64, renormalized, quantized to 8 bits). Every other candidate carries its matrix C
-and its scores only.
+Embedded couplings: A_fgw selected / oracle / L_partner, and the volume pipelines V_fgw and PC_fgw (selected; the
+target is the other embryo's volume samples or stack points, drawn as their in-plane projection, i.e. seen along
+the stack's z), as the top-k entries per row and per column (k_view of the stored top-64, renormalized, quantized to
+8 bits). Every other candidate carries its matrix C and its scores only.
 """
 import base64
 import json
@@ -79,7 +80,7 @@ def collect(cfg, pair, seed, root, k_view=8):
         qe, te = pair.sides(direction)
         data["directions"].append(dict(id=direction, label=pair.direction_label(direction),
                                        queries=list(qe.sections), targets=list(te.sections)))
-    for pipe in ("A_fgw",):
+    for pipe in ("A_fgw", "V_fgw", "PC_fgw"):
         if pipe not in cfg.raw["pipelines"] or pair.kind not in cfg.raw["pipelines"][pipe]["kinds"]:
             continue
         d = store.result_dir(root, cfg, pipe, pair.id, seed)

@@ -6,7 +6,10 @@ Columns of the Go table (one row per cross pair):
 - the nulls (random section, laterality partner, rigid only, feature-only OT, geometry-only GW, SCOT, organ prior);
 - the ceiling (between embryos where available, else the mean of both W) and the ceiling share;
 - OMS and Cohen's kappa alongside; delta kappa against the reference and win/loss against the noise margin;
-- the guardrails: regret, fold-overs, and for X6 the end-of-stack check.
+- the guardrails: regret, fold-overs, and for X6 the end-of-stack check;
+- with the volume pipelines in the config (step 3): V (V_fgw), its nulls V_feat_OT and V_GW, the point cloud PC
+  and dV / dPC = their kappa_bal minus A's; `volume_table` adds rejected mass, the depth reached and the consistency
+  of the query's sections per direction, and the X6 guardrail of the volumes. A stays the reference.
 """
 import json
 from pathlib import Path
@@ -28,6 +31,18 @@ COLUMNS = [
     ("SCOT", "A_scot", "selected"),
     ("prior", "A_fgw", "null:prior"),
 ]
+# the volume pipelines of step 3 (§1e, §2g): columns only where the config has them, so step 1's table is unchanged
+VOLUME_COLUMNS = [
+    ("V", "V_fgw", "selected"),
+    ("V_feat_OT", "V_linear", "selected"),
+    ("V_GW", "V_gw", "selected"),
+    ("PC", "PC_fgw", "selected"),
+]
+VOLUME_DELTAS = [("dV", "V"), ("dPC", "PC")]          # kappa_bal minus A's on the same pair (§2a)
+
+
+def columns(cfg):
+    return COLUMNS + [c for c in VOLUME_COLUMNS if c[1] in cfg.raw["pipelines"]]
 
 
 def load(cfg, root, pipelines=None, seeds=None):
@@ -160,7 +175,8 @@ def go_table(cfg, ser, root, tier, reference=None, seeds=None, margin=None):
     if df.empty:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), df
     vals, sds = {}, {}
-    for col, pipe, role in COLUMNS:
+    cols = columns(cfg)
+    for col, pipe, role in cols:
         vals[col], sds[col] = per_pair(df, pipe, role)
     oms, _ = per_pair(df, "A_fgw", "selected", "oms")
     kap, _ = per_pair(df, "A_fgw", "selected", "kappa")
@@ -178,8 +194,11 @@ def go_table(cfg, ser, root, tier, reference=None, seeds=None, margin=None):
         pair = ser.pairs[pid]
         c, src = ceiling_of(pair, ser, ceil_vals)
         r = dict(pair=pid, stage=pair.stage, overlap=pair.overlap, K=K.get(pid, np.nan))
-        for col, *_ in COLUMNS:
+        for col, *_ in cols:
             r[col] = vals[col].get(pid, np.nan)
+        for d, col in VOLUME_DELTAS:
+            if col in r:
+                r[d] = r[col] - r["A"]
         r["regret"] = r["oracle"] - r["A"]
         r.update(ceiling=c, ceiling_from=src, ceiling_share=r["A"] / c if c and np.isfinite(c) and c > 0 else np.nan,
                  W_human=ceil_vals.get(f"W:{pair.a.name}", np.nan), W_mouse=ceil_vals.get(f"W:{pair.b.name}", np.nan),
@@ -218,6 +237,40 @@ def go_table(cfg, ser, root, tier, reference=None, seeds=None, margin=None):
                          median_delta=float(np.median(d)) if d else np.nan,
                          wins=int(sum(x > margin for x in d)) if margin is not None and d else None))
     return go, ceil, pd.DataFrame(rank), df
+
+
+def volume_table(cfg, ser, df, tier):
+    """The volume pipelines per (pair, pipeline, direction), against A on the same pair and direction (§2a, §2c,
+    §2d): kappa_bal and delta, fold-overs, rejected mass (the query sections' own and each side's), the depth of the
+    matched mass (L_reached, its place in the target's L range, z_reached_rel), the parallel-section consistency
+    (normal_dev_deg, |order_rho|), and for the negative control (pair guardrail `end_of_stack`) the share of query
+    sections whose mass lands in the end of the target's L range on the query's side (end_fraction of the range)."""
+    vol = [p for p, s in cfg.raw["pipelines"].items() if s["strategy"] == "volume"]
+    d = df[df.pipeline.isin(vol) & (df.role == "selected")] if len(df) else df
+    if d is None or d.empty:
+        return pd.DataFrame()
+    pairs = set(ser.tier(tier))
+    a = df[(df.pipeline == "A_fgw") & (df.role == "selected")]
+    a_dir = a.groupby(["pair", "direction"]).kappa_bal.mean().to_dict()
+    ef = cfg.raw["guardrails"]["end_fraction"]
+    rows = []
+    for (pid, pipe, direction), g in d[d.pair.isin(pairs)].groupby(["pair", "pipeline", "direction"]):
+        r = dict(pair=pid, pipeline=pipe, direction=g.direction_label.iloc[0], n_queries=g["query"].nunique(),
+                 kappa_bal=float(g.kappa_bal.mean()), delta_A=float(g.kappa_bal.mean() - a_dir.get((pid, direction),
+                                                                                                    np.nan)),
+                 foldover=float(g.foldover.mean()), rejected_query=float(g.rejected_query.mean()),
+                 rejected_side_query=float(g.rejected_side_query.mean()),
+                 rejected_side_target=float(g.rejected_side_target.mean()), L_query=float(g.L_query.mean()),
+                 L_reached=float(g.L_reached.mean()), L_reached_rel=float(g.L_reached_rel.mean()),
+                 z_reached_rel=float(g.z_reached_rel.mean()), normal_dev_deg=float(g.normal_dev_deg.mean()),
+                 order_rho_abs=float(g.order_rho.abs().mean()))
+        if ser.pairs[pid].guardrail == "end_of_stack":
+            other = d[(d.pair == pid) & (d.pipeline == pipe) & (d.direction != direction)].L_query.mean()
+            high = r["L_query"] > other                       # the query embryo is the more lateral one
+            ok = g.L_reached_rel >= 1 - ef if high else g.L_reached_rel <= ef
+            r.update(g_end_share=float(ok.mean()), g_end_ok=bool(ok.mean() >= cfg.raw["guardrails"]["end_pass_share"]))
+        rows.append(r)
+    return pd.DataFrame(rows)
 
 
 def sweep_table(cfg_loader, key, values, ser, root, tier, pipeline="A_fgw"):

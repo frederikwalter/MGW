@@ -90,8 +90,9 @@ def contact_sheet(pair, pipeline, direction, d, rows, sections, targets, pal, ou
     return out
 
 
-def sheets(cfg, pair, seed, root, outdir, pipelines=("A_fgw",)):
-    """All contact sheets of one pair and seed. Returns the files written."""
+def sheets(cfg, pair, seed, root, outdir, pipelines=("A_fgw", "V_fgw", "PC_fgw")):
+    """All contact sheets of one pair and seed (a volume target is drawn as its in-plane projection). Returns the
+    files written."""
     sh = cfg.section_hash()
     sections, labels = {}, []
     for e in pair.embryos:

@@ -18,7 +18,7 @@ from mgw.bench.report import figures, table, viewer
 
 FMT3 = ["K", "A", "oracle", "regret", "rand_section", "L_partner", "rigid", "feat_OT",
         "space_GW", "SCOT", "prior", "ceiling", "ceiling_share", "W_human", "W_mouse", "OMS", "kappa", "A_sd",
-        "delta_ref"]
+        "delta_ref", "V", "V_feat_OT", "V_GW", "PC", "dV", "dPC"]
 
 
 def resolve_reference(cfg, reference=None):
@@ -33,7 +33,10 @@ def resolve_reference(cfg, reference=None):
         entry = ref["current"]
     entry = dict(entry)
     if not entry.get("hash"):
-        rc = bconfig.load(entry.get("config") or cfg.path, entry.get("overrides") or list(cfg.overrides))
+        # overrides of other pipelines (e.g. --set pipelines.V_fgw.params...) do not exist in the reference's config
+        ov = [o for o in (entry.get("overrides") or list(cfg.overrides))
+              if not o.startswith("pipelines.") or o.startswith(f"pipelines.{entry['pipeline']}.")]
+        rc = bconfig.load(entry.get("config") or cfg.path, ov)
         entry["hash"] = rc.pipeline_hash(entry["pipeline"])
     return entry
 
@@ -102,7 +105,9 @@ def report(cfg, ser, root, tier="screen", name=None, reference=None, viewers=Tru
     margin = noise.get("margin") if noise else None
     go, ceil, rank, df = table.go_table(cfg, ser, root, tier, reference=ref, seeds=seeds, margin=margin)
     sel = table.selection_quality(df) if len(df) else pd.DataFrame()
-    for f, d in (("table.csv", go), ("ceilings.csv", ceil), ("ranking.csv", rank), ("selection.csv", sel)):
+    vol = table.volume_table(cfg, ser, df, tier)
+    for f, d in (("table.csv", go), ("ceilings.csv", ceil), ("ranking.csv", rank), ("selection.csv", sel),
+                 ("volumes.csv", vol)):
         d.to_csv(out / f, index=False)
     (out / "noise.json").write_text(json.dumps(noise, indent=1))
     sw = None
@@ -118,6 +123,8 @@ def report(cfg, ser, root, tier="screen", name=None, reference=None, viewers=Tru
           "\n## Ceilings (A on same-species pairs)\n", to_markdown(ceil),
           "\n## Pipelines against the reference\n", to_markdown(rank),
           "\n## Selection: Spearman(objective, κ_bal) over each query's candidates\n", to_markdown(sel)]
+    if len(vol):
+        md += ["\n## Volume pipelines per direction (rejected mass, depth reached, consistency)\n", to_markdown(vol)]
     if sw is not None:
         md += [f"\n## Sweep over {sweep}\n", to_markdown(sw)]
     (out / "table.md").write_text("\n".join(md))
@@ -158,6 +165,13 @@ def report(cfg, ser, root, tier="screen", name=None, reference=None, viewers=Tru
             "<h2>Ceilings</h2><div class='card'>", to_html(ceil, links=links), "</div>",
             "<h2>Pipelines against the reference</h2><div class='card'>", to_html(rank), "</div>",
             "<h2>Selection quality</h2><div class='card'>", to_html(sel, links=links), "</div>"]
+    if len(vol):
+        body += ["<h2>Volume pipelines</h2><div class='card'>", to_html(vol, links=links),
+                 "<p class='muted'>V: field-sampled volumes, FGW · V_feat_OT / V_GW: features only / geometry only · "
+                 "PC: the registered stack points with slab masses (no field) · delta_A: κ_bal minus A's · "
+                 "rejected_*: mass the unbalanced solve leaves unmatched · L_reached: mass-weighted L of the target "
+                 "spots reached (L_reached_rel: 0 at the target's lowest L, 1 at its highest) · normal_dev_deg, "
+                 "order_rho_abs: the query's parallel sections in the target (§2d) · g_end: X6 guardrail.</p></div>"]
     if sw is not None:
         body += [f"<h2>Sweep over {html.escape(sweep)}</h2><div class='card'>", to_html(sw),
                  "<p><img src='png/sweep.png' alt='kappa_bal against the swept value' style='max-width:100%'></p></div>"]
