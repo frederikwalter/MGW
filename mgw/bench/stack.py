@@ -161,6 +161,15 @@ def build_stack(names, xy_raw, feats, labels, params, *, dataset, fgw_alpha, dL_
     return ST, dict(order=order, mode=mode, D=D, reg=reg, gaps=gp)
 
 
+def skip_coupling(xa, xb, fa, fb, params):
+    """The direct coupling of two registered sections that are not neighbours in the stack (k and k + 2, say):
+    FGW (moscot), refined by OT-ICP without reflection. Both already sit in the stack frame, so the coupling only
+    supplies the displacement pairs across the wider gap (leave-one-out, odd/even halves)."""
+    P0 = solvers.moscot_pair(xa, fa, xb, fb, params.pair_alpha, params.pair_eps)
+    return s3.register_pair(xa, xb, fa, fb, P0, flip=False, lam=params.icp_lambda, n_iter=params.icp_iter,
+                            epsilon=params.icp_eps)["P"]
+
+
 def loo_check(ST, reg_xy, feats, Y, params, steps=11, max_obs=1000, gaps=None):
     """Leave-one-out check of the stack (cell 17): for every interior section k, its neighbours are coupled
     directly and virtual sections between them are compared with section k (nearest neighbours in xy).
@@ -171,10 +180,8 @@ def loo_check(ST, reg_xy, feats, Y, params, steps=11, max_obs=1000, gaps=None):
     rows, loo_pairs = [], {}
     for k in range(1, len(names) - 1):
         a, b = k - 1, k + 1
-        P0 = solvers.moscot_pair(reg_xy[a], feats[a], reg_xy[b], feats[b], params.pair_alpha, params.pair_eps)
-        reg = s3.register_pair(reg_xy[a], reg_xy[b], feats[a], feats[b], P0, flip=False, lam=params.icp_lambda,
-                               n_iter=params.icp_iter, epsilon=params.icp_eps)
-        loo_pairs[k] = reg["P"]
+        loo_pairs[k] = skip_coupling(reg_xy[a], reg_xy[b], feats[a], feats[b], params)
+        reg = dict(P=loo_pairs[k])
         # both neighbours already sit in the stack frame; the direct coupling only supplies the pairs
         xyz2 = np.vstack([np.c_[reg_xy[a], np.zeros(len(reg_xy[a]))], np.c_[reg_xy[b], np.ones(len(reg_xy[b]))]])
         pairs2 = [s3.displacement_pairs(reg["P"], 0, len(reg_xy[a]))]

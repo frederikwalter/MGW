@@ -78,37 +78,54 @@ def cost_scale(Fq, Ft, q=0.99, max_entries=20_000_000, seed=0):
 
 
 # ---------- solvers
-def fgw(xa, xb, M, p: FGWParams, *, tau_a=1.0, tau_b=1.0, Ca=None, Cb=None):
-    """Entropic fused GW of two point sets (OTT), distances max-normalized: the notebook's solve_2d."""
+def _gw_unbalanced(Ca, Cb, tau_a, tau_b, unbalanced_correction, **kw):
+    """solve_gw_ott, retried once without OTT's unbalanced correction if the unbalanced solve returns NaN (it does
+    at small epsilon and tau <= 0.9 in float32). info["ugw_fallback"] records the retry."""
+    P, info = solve_gw_ott(Ca, Cb, tau_a=tau_a, tau_b=tau_b, unbalanced_correction=unbalanced_correction,
+                           verbose=False, return_info=True, **kw)
+    info["ugw_fallback"] = False
+    if (tau_a < 1 or tau_b < 1) and unbalanced_correction and not np.isfinite(np.asarray(P)).all():
+        P, info = solve_gw_ott(Ca, Cb, tau_a=tau_a, tau_b=tau_b, unbalanced_correction=False, verbose=False,
+                               return_info=True, **kw)
+        info["ugw_fallback"] = True
+    return P, info
+
+
+def fgw(xa, xb, M, p: FGWParams, *, tau_a=1.0, tau_b=1.0, Ca=None, Cb=None, a=None, b=None,
+        unbalanced_correction=True, epsilon=None):
+    """Entropic fused GW of two point sets (OTT), distances max-normalized: the notebook's solve_2d. Any dimension
+    (2D sections, 3D volumes); masses a, b (default uniform) and tau < 1 for an unbalanced solve (§1e)."""
     Ca = dist_norm(xa) if Ca is None else Ca
     Cb = dist_norm(xb) if Cb is None else Cb
     t0 = time.perf_counter()
-    P, info = solve_gw_ott(Ca, Cb, M=M, alpha=(1 - p.alpha) / p.alpha, epsilon=p.epsilon, tau_a=tau_a, tau_b=tau_b,
-                           inner_maxit=p.inner_maxit, outer_maxit=p.outer_maxit, inner_tol=p.inner_tol,
-                           outer_tol=p.outer_tol, verbose=False, return_info=True)
+    P, info = _gw_unbalanced(Ca, Cb, tau_a, tau_b, unbalanced_correction, a=a, b=b, M=M,
+                             alpha=(1 - p.alpha) / p.alpha, epsilon=epsilon or p.epsilon, inner_maxit=p.inner_maxit,
+                             outer_maxit=p.outer_maxit, inner_tol=p.inner_tol, outer_tol=p.outer_tol)
     info["seconds"] = time.perf_counter() - t0
     return np.asarray(P, dtype=np.float64), info
 
 
-def gw(C1, C2, p: FGWParams, epsilon=None):
-    """Entropic GW (no linear term) on two max-normalized cost matrices."""
+def gw(C1, C2, p: FGWParams, epsilon=None, *, a=None, b=None, tau_a=1.0, tau_b=1.0, unbalanced_correction=True):
+    """Entropic GW (no linear term) on two max-normalized cost matrices (masses and tau as in fgw)."""
     t0 = time.perf_counter()
-    P, info = solve_gw_ott(C1, C2, epsilon=epsilon or p.epsilon, inner_maxit=p.inner_maxit,
-                           outer_maxit=p.outer_maxit, inner_tol=p.inner_tol, outer_tol=p.outer_tol,
-                           verbose=False, return_info=True)
+    P, info = _gw_unbalanced(C1, C2, tau_a, tau_b, unbalanced_correction, a=a, b=b, epsilon=epsilon or p.epsilon,
+                             inner_maxit=p.inner_maxit, outer_maxit=p.outer_maxit, inner_tol=p.inner_tol,
+                             outer_tol=p.outer_tol)
     info["seconds"] = time.perf_counter() - t0
     return np.asarray(P, dtype=np.float64), info
 
 
-def linear_ot(M, epsilon=5e-3, maxit=3000, tol=1e-7):
-    """Entropic OT on the cross cost only (uniform marginals)."""
+def linear_ot(M, epsilon=5e-3, maxit=3000, tol=1e-7, *, a=None, b=None, tau_a=1.0, tau_b=1.0):
+    """Entropic OT on the cross cost only (uniform marginals by default; tau < 1: unbalanced)."""
     import jax.numpy as jnp
     from ott.geometry import geometry
     from ott.problems.linear import linear_problem
     from ott.solvers.linear.sinkhorn import Sinkhorn
     t0 = time.perf_counter()
     geom = geometry.Geometry(cost_matrix=jnp.asarray(M, dtype=jnp.float32), epsilon=epsilon)
-    out = Sinkhorn(max_iterations=maxit, threshold=tol)(linear_problem.LinearProblem(geom))
+    m = lambda w: None if w is None else jnp.asarray(w, dtype=jnp.float32)
+    out = Sinkhorn(max_iterations=maxit, threshold=tol)(linear_problem.LinearProblem(geom, a=m(a), b=m(b),
+                                                                                     tau_a=tau_a, tau_b=tau_b))
     P = np.asarray(out.matrix, dtype=np.float64)
     return P, dict(converged=bool(out.converged), n_outer=int(out.n_iters), seconds=time.perf_counter() - t0)
 
