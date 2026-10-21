@@ -3,11 +3,12 @@ import time
 import traceback
 
 from mgw.bench import store
-from mgw.bench.pipelines import real2d
+from mgw.bench.pipelines import real2d, volume as volume_strategy
 from mgw.bench.pipelines.common import Task
 
 STRATEGY = {
     "real2d": real2d.run,
+    "volume": volume_strategy.run,
 }
 
 
