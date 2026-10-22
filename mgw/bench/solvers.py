@@ -1,11 +1,12 @@
-"""2D (and 2D -> 3D) couplings without notebook globals: FGW and the null aligners.
+"""Couplings without notebook globals: entropic FGW (OTT) and the intra-domain costs it runs on.
 
-Every solver returns (P, info) with P (n_a x n_b) and info a dict (converged, iterations, seconds). The objective
-of each aligner is what a pipeline selects candidates by:
-- fgw:         alpha * GW(Ca/max, Cb/max, P) + (1 - alpha) * <M, P>   (fgw_objective, as in the 3D notebook)
-- linear:      <M, P>                                                  (features only, no geometry)
-- spatial_gw:  GW(Ca/max, Cb/max, P)                                   (geometry only, no features)
-- scot:        GW(Fa/max, Fb/max, P), F the feature distances          (SCOT: feature geometry only)
+fgw returns (P, info) with P (n_a x n_b) and info a dict (converged, iterations, seconds). The objective a pipeline
+selects candidates by is alpha * GW(Ca, Cb, P) + (1 - alpha) * <M, P> (fgw_objective, as in the 3D notebook), with
+Ca, Cb max-normalized intra-domain costs:
+- Euclidean distances (dist_norm): FGW;
+- shortest paths in a Euclidean kNN graph (knn_geodesic): Riemannian FGW;
+- geodesics under the pull-back metric of a map phi from coordinates to features (pullback_geodesic; mgw_cost trains
+  phi on one section): MGW.
 """
 import time
 from dataclasses import dataclass, fields
@@ -105,45 +106,62 @@ def fgw(xa, xb, M, p: FGWParams, *, tau_a=1.0, tau_b=1.0, Ca=None, Cb=None, a=No
     return np.asarray(P, dtype=np.float64), info
 
 
-def gw(C1, C2, p: FGWParams, epsilon=None, *, a=None, b=None, tau_a=1.0, tau_b=1.0, unbalanced_correction=True):
-    """Entropic GW (no linear term) on two max-normalized cost matrices (masses and tau as in fgw)."""
-    t0 = time.perf_counter()
-    P, info = _gw_unbalanced(C1, C2, tau_a, tau_b, unbalanced_correction, a=a, b=b, epsilon=epsilon or p.epsilon,
-                             inner_maxit=p.inner_maxit, outer_maxit=p.outer_maxit, inner_tol=p.inner_tol,
-                             outer_tol=p.outer_tol)
-    info["seconds"] = time.perf_counter() - t0
-    return np.asarray(P, dtype=np.float64), info
-
-
-def linear_ot(M, epsilon=5e-3, maxit=3000, tol=1e-7, *, a=None, b=None, tau_a=1.0, tau_b=1.0):
-    """Entropic OT on the cross cost only (uniform marginals by default; tau < 1: unbalanced)."""
-    import jax.numpy as jnp
-    from ott.geometry import geometry
-    from ott.problems.linear import linear_problem
-    from ott.solvers.linear.sinkhorn import Sinkhorn
-    t0 = time.perf_counter()
-    geom = geometry.Geometry(cost_matrix=jnp.asarray(M, dtype=jnp.float32), epsilon=epsilon)
-    m = lambda w: None if w is None else jnp.asarray(w, dtype=jnp.float32)
-    out = Sinkhorn(max_iterations=maxit, threshold=tol)(linear_problem.LinearProblem(geom, a=m(a), b=m(b),
-                                                                                     tau_a=tau_a, tau_b=tau_b))
-    P = np.asarray(out.matrix, dtype=np.float64)
-    return P, dict(converged=bool(out.converged), n_outer=int(out.n_iters), seconds=time.perf_counter() - t0)
-
-
-def rigid_icp(xq, xt, fq, ft, P0, lam=0.5, n_iter=15, epsilon=5e-3):
-    """Rigid placement only: OT-ICP of the target onto the query (rotation or reflection, the lower cost), started
-    from P0. Both sides are scaled to an RMS radius of 1 (a rigid map cannot fix size). Returns the ICP coupling."""
-    t0 = time.perf_counter()
-    reg = s3.register_pair(centred(xq), centred(xt), fq, ft, P0, flip="auto", lam=lam, n_iter=n_iter,
-                           epsilon=epsilon)
-    return np.asarray(reg["P"], dtype=np.float64), dict(converged=True, n_outer=len(reg["history"]),
-                                                       reflected=bool(reg["reflected"]),
-                                                       seconds=time.perf_counter() - t0)
-
-
 def moscot_pair(xa, fa, xb, fb, alpha=0.8, epsilon=1e-2):
     """FGW of two sections of one embryo on their shared embedding (moscot, spatial weight alpha)."""
     from validation.moscot_align import align_moscot
     P, _ = align_moscot(light(xa, fa), light(xb, fb), joint_attr="X_emb", alpha=alpha, epsilon=epsilon,
                         verbose=False)
     return P
+
+
+# ---------- intra-domain costs beyond Euclidean (Riemannian FGW, MGW)
+def _torch_device(device=None):
+    import torch
+    return torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+
+
+def _max_norm(D):
+    D = np.maximum(np.asarray(D, dtype=np.float64), 0.0)
+    np.fill_diagonal(D, 0.0)
+    if not np.isfinite(D).all():
+        raise ValueError(f"{(~np.isfinite(D)).sum()} non-finite geodesic distances")
+    return D / D.max()
+
+
+def knn_geodesic(X, k=12):
+    """Shortest-path distances in the Euclidean kNN graph of X (any dimension), divided by their maximum."""
+    from scipy.sparse.csgraph import dijkstra
+    from mgw import geometry
+    return _max_norm(dijkstra(geometry.knn_graph(np.asarray(X, dtype=np.float64), k=k), directed=False))
+
+
+def pullback_geodesic(phi, X, k=12, eps=1e-2, device=None, dtype=None):
+    """Geodesic distances under the pull-back metric J_phi^T J_phi of phi (a callable on n x d tensors of `dtype`,
+    default float64), along the kNN graph of X, divided by their maximum: MGW's intra-domain cost
+    (mgw.mgw_align_core)."""
+    import torch
+    from mgw import geometry
+    X = np.asarray(X, dtype=np.float32 if dtype == torch.float32 else np.float64)
+    G = geometry.pullback_metric_field(phi, torch.as_tensor(X, device=_torch_device(device)), eps=eps).cpu()
+    return _max_norm(geometry.geodesic_distances_fast(X, G, geometry.knn_graph(X.astype(np.float64), k=k)))
+
+
+def mgw_cost(xy, F, p, seed=0, device=None, log=None):
+    """MGW's cost of one section: phi (coordinates -> features, z-scored per column) is trained on the section alone,
+    then pullback_geodesic. p: the config's mgw block (widths, lr, niter, knn_k, geodesic_eps)."""
+    import torch
+    from mgw import models
+    dev = _torch_device(device)
+    X = centred(xy)
+    F = np.asarray(F, dtype=np.float64)
+    Y = (F - F.mean(0)) / np.where(F.std(0) > 0, F.std(0), 1.0)
+    torch.manual_seed(int(seed))
+    phi = models.PhiModel(X.shape[1], Y.shape[1], widths=tuple(p["widths"])).double()
+    phi = models.train_phi(phi, torch.from_numpy(X), torch.from_numpy(Y), lr=p["lr"], niter=p["niter"],
+                           print_every=p["niter"] + 1, device=dev)
+    phi.eval()
+    if log:
+        with torch.no_grad():
+            mse = float(((phi(torch.from_numpy(X).to(dev)).cpu().numpy() - Y) ** 2).mean())
+        log(f"    mgw phi: {len(X)} points, {p['niter']} steps, mse {mse:.4f}")
+    return pullback_geodesic(phi, X, p["knn_k"], p["geodesic_eps"], dev, torch.float64)

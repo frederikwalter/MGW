@@ -1,0 +1,120 @@
+# The cross-species alignment benchmark (bench/README.md). Two questions, one metric (kappa_bal), one figure:
+#   1. 2D <-> 2D: which tool aligns real sections best?                          A_fgw, A_mgw
+#   2. 3D <-> 3D: which tool is best within an embryo (stacking) ...            S_*
+#                 ... and between embryos (volume <-> volume), and how much better than the best 2D tool?   V_*, PC_*
+# Run `python -m mgw.bench <command>`; any value can be overridden with `--set group.key=value` (the override enters
+# the hashes, so its results go to their own folders).
+name: bench
+series: series.yaml
+
+reduce:
+  max_obs: 5000              # points per section (Voronoi-merged bins)
+  subsample: voronoi
+  agg: sum
+  lloyd_iter: 3
+  drop_labels: [Cavity, Extraembryonic Tissue]
+
+features:
+  pca_comp: 30
+  n_hvg: 2000
+  n_eval_genes: 500          # held-out 1:1 orthologs, never in the embedding
+  m_scale_quantile: 0.99     # the cross cost is cdist / this quantile (one per pair)
+  zscore_by: section         # genes z-scored per section (or per embryo)
+
+fgw:
+  alpha: 0.5                 # GW weight; 1 - alpha on the cross cost
+  epsilon: 5.0e-3
+  inner_maxit: 3000
+  outer_maxit: 200
+  inner_tol: 1.0e-7
+  outer_tol: 1.0e-7
+
+stack:                       # stage 1: the stack of an embryo's serial sections
+  order: auto                # file order for HESTA, inferred for MOSTA
+  pair_alpha: 0.8
+  pair_eps: 1.0e-2
+  icp_lambda: 0.5
+  icp_iter: 15
+  icp_eps: 5.0e-3
+  section_flip: auto
+  global_sweeps: 2
+  coupling: moscot_icp       # the within-embryo coupling of the volume pipelines: set it to the winner of the S_* tools
+
+field:                       # the field over each stack (V_* pipelines)
+  width: 128
+  depth: 3
+  n_freq: 64
+  sigma_xy: 4.0
+  sigma_z: 1.0
+  steps: 3000
+  batch: 2048
+  lr: 2.0e-3
+  lambda_depth: 1.0
+  lambda_occ: 0.5
+  lambda_smooth: 1.0e-3
+  occ_out: 2.0
+  occ_jitter: 0.5
+  device: auto               # not hashed
+
+mgw:                         # MGW: phi per section (2D), geodesics under the pull-back metric (2D and 3D)
+  widths: [128, 256, 256, 128]
+  lr: 1.0e-3
+  niter: 20000
+  knn_k: 12
+  geodesic_eps: 1.0e-2
+
+rfgw:
+  knn_k: 12                  # Riemannian FGW: shortest paths in this kNN graph of the volume samples
+
+pipelines:
+  # ---- question 1: 2D <-> 2D (every query section x every real target section, the lowest objective selected)
+  A_fgw:
+    strategy: real2d
+    aligner: fgw             # FGW on Euclidean distances within each section
+  A_mgw:
+    strategy: real2d
+    aligner: mgw             # FGW on MGW geodesics (phi trained once per section)
+  # ---- question 2a: the within-embryo coupling of neighbouring sections
+  S_moscot_icp:
+    strategy: stack
+    params: {coupling: moscot_icp}         # moscot FGW, refined by OT-ICP (the current stage 1)
+  S_moscot_procrustes:
+    strategy: stack
+    params: {coupling: moscot_procrustes}  # the same moscot FGW coupling, one Procrustes fit (what OT-ICP adds)
+  S_mgw_icp:
+    strategy: stack
+    params: {coupling: mgw_icp}            # FGW on MGW geodesics, refined by OT-ICP
+  # ---- question 2b: between embryos, 3D <-> 3D (on the stacks of stack.coupling)
+  V_fgw:
+    strategy: volume
+    aligner: fgw             # field-sampled volumes, unbalanced FGW on Euclidean distances
+    params: &volume
+      representation: field
+      n_samples: 6000
+      tau: 0.95
+      epsilon: null
+      unbalanced_correction: true
+      k_query: 8
+      k_target: 3
+  PC_fgw:
+    strategy: volume
+    aligner: fgw             # the registered stack points (no field), slab masses, real features
+    params: {<<: *volume, representation: points}
+  V_rfgw:
+    strategy: volume
+    aligner: rfgw            # field volumes, shortest paths in a kNN graph (Riemannian FGW)
+    params: *volume
+  V_mgw:
+    strategy: volume
+    aligner: mgw             # field volumes, geodesics under the pull-back metric of the field's features
+    params: *volume
+
+metrics:
+  present_min_bins: 5        # an organ is present on a side with >= 5 bins (full resolution)
+  presence: embryo           # K: organs of the query present in the whole target embryo, not just the target
+
+seeds:
+  smoke: [0]
+  dev: [0, 1, 2]
+  screen: [0]
+  full: [0]

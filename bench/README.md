@@ -1,129 +1,89 @@
 # Cross-species alignment benchmark (`mgw.bench`)
 
-Steps 1–3 of [`docs/st_3d_alignment_strategies.md`](../docs/st_3d_alignment_strategies.md) §6:
-- step 1: the metric harness (κ_bal with OMS and Cohen's κ, guardrails), the series of §4, the 2D ↔ 2D reference pipeline (A with FGW, both directions), its nulls and ceilings, and a report with an interactive alignment viewer;
-- step 2: the field of §1c–§1d (`mgw/bench/field.py`) and the within-species gates G1 and G2 (`mgw/bench/gates.py`, `configs/gates.yaml`);
-- step 3: the volume pipelines V_fgw, V_linear, V_gw and the point-cloud ablation PC_fgw (`mgw/bench/pipelines/volume.py`, `configs/step3.yaml`).
+The benchmark answers two questions about aligning human (HESTA) and mouse (MOSTA) embryos:
 
-Steps 2 and 3 are implemented and tested on a synthetic embryo pair (`mgw/bench/synthetic.py`); they have not yet been run on HESTA/MOSTA.
+1. **2D ↔ 2D baseline.** Which tool aligns real sections best?
+2. **3D ↔ 3D.** Which tool is best for each of the two couplings, and how much better is 3D than the best 2D tool?
+   - **Within embryo:** coupling neighbouring sections into a stack.
+   - **Between embryos:** volume ↔ volume.
 
-## Commands
+**One metric: organ-balanced Cohen's κ (κ_bal).** C is the soft organ × organ matrix of a coupling: the mass sent from each query organ to each target organ, at full resolution. κ_bal is Cohen's κ of C after every query organ is given the same mass. 0 is chance, and 1 means every organ's tissue lands on the same organ in the other embryo. Every score is the mean of both directions (`mgw/bench/metrics.py`).
+
+**One figure:** for each pair and direction, every query section's annotated organs next to the organs transferred along the best 2D and the best 3D alignment.
+
+## Pipelines
+
+All live in [`configs/bench.yaml`](configs/bench.yaml); the pairs are in [`configs/series.yaml`](configs/series.yaml) (Dev: X1, X4; Screen: X1–X5; Full: + X6).
+
+| Question | Pipeline | What it does |
+| --- | --- | --- |
+| 1 | `A_fgw` | Every query section × every real target section, FGW on Euclidean distances. The target with the lowest objective is selected |
+| 1 | `A_mgw` | The same, but the intra-section cost is MGW's geodesics under the pull-back metric of φ (φ trained once per section) |
+| 2a | `S_moscot_icp` | Neighbours coupled by moscot FGW, refined by OT-ICP (the current stage 1) |
+| 2a | `S_moscot_procrustes` | The same moscot coupling, one Procrustes fit and no OT-ICP. Shows what OT-ICP adds |
+| 2a | `S_mgw_icp` | Neighbours coupled by FGW on MGW geodesics, refined by OT-ICP |
+| 2b | `V_fgw` | A neural field per stack, sampled volumes, unbalanced FGW on Euclidean distances |
+| 2b | `PC_fgw` | The registered stack points (no field), slab masses, unbalanced FGW |
+| 2b | `V_rfgw` | Field volumes, FGW on shortest paths in a kNN graph (Riemannian FGW) |
+| 2b | `V_mgw` | Field volumes, FGW on geodesics under the pull-back metric of the field's features |
+
+How each question is scored:
+- **2D pipelines:** κ_bal of the selected coupling of every query section.
+- **`S_*` pipelines:** κ_bal of the kept coupling of every pair of neighbouring sections, both ways. The score is per embryo.
+- **3D pipelines:** stack both embryos with `stack.coupling`, then score κ_bal on the real query spots of every section, so the rows compare one-to-one with the 2D rows.
+
+## Runbook
 
 ```bash
-python -m mgw.bench [--config step1.yaml] [--set key=value ...] [--root DIR] <command>
+python -m mgw.bench [--set key=value ...] [--root DIR] <command>     # config: bench/configs/bench.yaml
+
+python -m mgw.bench check-data --tier dev            # missing raw sections, with curl commands
+python -m mgw.bench prepare --tier dev --seeds 0-2   # data server: sections, features (CPU, RAM)
+python -m mgw.bench run --tier dev --pipelines A_fgw,A_mgw                                  # question 1
+python -m mgw.bench run --tier dev --pipelines S_moscot_icp,S_moscot_procrustes,S_mgw_icp   # question 2a
+#   set stack.coupling in bench.yaml to the best S_* tool (or pass --set stack.coupling=...)
+python -m mgw.bench run --tier dev --pipelines V_fgw,PC_fgw,V_rfgw,V_mgw                    # question 2b
+python -m mgw.bench report --tier dev
 ```
 
-| Command | Where | What |
-| --- | --- | --- |
-| `check-data --tier screen` | data server | sections without a raw file, with `curl` commands |
-| `prepare --tier screen [--seeds 0-4]` | data server (CPU, RAM) | reduce sections, cache organ counts and ortholog counts, compute the features |
-| `plan --tier screen` | anywhere | task list `tasks/<name>_<tier>.jsonl`, one line per pipeline × pair × seed |
-| `run --tasks FILE --task $SLURM_ARRAY_TASK_ID` | GPU | one task of the list (job arrays) |
-| `run --tier dev [--pipelines A_fgw] [--pairs X4] [--seeds 0,1]` | GPU | every matching task, in sequence (screen session) |
-| `noise --tier dev` | anywhere | noise margin: 2 × the SD over seeds of the pair-level κ_bal |
-| `report --tier screen [--reference history:0]` | anywhere | the Go table, ceilings, ranking, viewers, PNG sheets |
-| `report --tier dev --sweep reduce.max_obs --sweep-values 1000,2500,5000,10000` | anywhere | κ_bal and solve time against one setting |
-| `promote <pipeline>` | locally, then commit | make a pipeline the reference; the old one goes to `history` |
-| `gates g1 [--embryos CS18_E1,...] [--seeds 0-2] [--no-grid]` | GPU (or CPU, slower) | G1, held-out section, over the grid of `gates.yaml` (the default config of `gates`) |
-| `gates g2 [--embryos ...] [--seeds ...]` | GPU | G2, the odd/even split, with field and point cloud |
+- `run` takes `--pairs X4` and `--seeds 0` to narrow the run down. Finished tasks are skipped, and `--force` reruns them.
+- For job arrays, `plan --tier screen` writes one task per line, and `run --tasks FILE --task $SLURM_ARRAY_TASK_ID` runs one of them.
+- `run` never reads the h5ad files, so only `cache/` has to be copied to a GPU machine.
+- MGW and the fields train on CUDA when torch sees a GPU.
 
-The root (`--root`, `$MGW_BENCH_DIR`, or `<MGW data dir>/bench`) holds `cache/`, `results/`, `tasks/` and `reports/`. Raw sections come from `$MGW_HESTA_DIR` / `$MGW_MOSTA_DIR`, or `<data dir>/hesta`, `/mosta`. Steps 2–3 add `cache/stacks/<embryo>/*_skip.npz` (the direct couplings of sections two apart), `cache/fields/<pair>/<embryo>/` (trained fields, `.pt`), `cache/volumes/<pair>/<embryo>/` (sampled volumes) and `results/gates/`.
+## Output
 
-Run `prepare` before `run`. `run` never reads the h5ad files, so only `cache/` has to be copied to a GPU cluster.
+The root (`--root`, `$MGW_BENCH_DIR`, or `<MGW data dir>/bench`) holds `cache/`, `results/` and `reports/`.
 
-## Step 1 runbook
+- `results/<pipeline>-<hash>/<pair>/seed<s>/`:
+  - `scores.csv`: one row per (direction, query, target, role), with `kappa_bal`, `K`, `objective` and `seconds`.
+  - `transfer.npz`: the transferred organ of every query spot of the selected couplings.
+  - `manifest.json`: the config, the environment and the timings.
+- `reports/<tier>/`:
+  - `index.html` and `table.md`: the three κ_bal tables (2D tools; within-embryo tools; 3D tools with Δ against the best 2D tool) and the figures.
+  - `2d.csv`, `within.csv`, `3d.csv`: the tables.
+  - `png/transfer_<pair>_<direction>_seed<s>.png`: each query section annotated | best 2D | best 3D.
+- Values are means over seeds, ± the SD where there are several. ★ marks the best tool: the highest median over the pairs, or the highest mean over the embryos for question 2a.
 
-1. **LNT, data server.** `check-data`, then `prepare --tier dev --seeds 0-4` and `prepare --tier screen`.
-2. **LNT, GPU boxes.** Run Dev (`run --tier dev --seeds 0,1`, `--seeds 2,3`, … in parallel screen sessions), then `noise --tier dev`.
-3. **MAX_OBS sweep.** Prepare and run with `--set reduce.max_obs=1000`, `2500` and `10000`, plus the default 5000, for `--pairs X4,W:CS18_E1,W:E12.5_E1 --pipelines A_fgw --seeds 0`. 10000 runs on LRZ.
-4. **LRZ.** rsync `cache/` (sections and features of seed 0) to the LRZ root, then `plan --tier screen` and a job array over the task list, with 1 GPU per task.
-5. **Results.** rsync `results/` back, then `report --tier screen`; `reports/step1_screen/index.html` holds the Go table.
+## Caches and hashes
 
-## Steps 2–3 runbook (gates, then volumes)
-
-All commands run from the repository root with the environment active (`uv run` or `.venv`). Add `--root DIR` if `$MGW_BENCH_DIR` is not set. The field trains on CUDA when torch sees a GPU; `$MGW_FIELD_DEVICE=cpu|cuda` overrides that. The device is not part of any hash.
-
-1. **Features, data server.** The gates and the volumes use the same section, feature and stack caches as A, so `prepare --tier dev --seeds 0-2` from step 1 is enough for `zscore_by: section`. The G1 grid also compares `embryo`, so run:
-   ```bash
-   python -m mgw.bench --config gates.yaml prepare --tier dev --seeds 0-2 --set features.zscore_by=embryo
-   ```
-   With other features the stack is a new cache entry and is rebuilt once per embryo and seed.
-2. **G1, GPU.** Start with the grid on one seed, then run the best settings on all seeds to get the noise margin:
-   ```bash
-   python -m mgw.bench gates g1 --seeds 0                        # grid: zscore_by x field.sigma_z (gates.yaml)
-   python -m mgw.bench --set features.zscore_by=embryo --set field.sigma_z=1.0 gates g1 --seeds 0-2 --no-grid
-   ```
-   - Output: `results/gates/gates_g1/rows.csv` (one row per setting, embryo, seed, section and predictor), `summary.csv` (per embryo: mean r_heldout of each predictor, the deltas, the margin and `passed`), `selection.csv` (settings ranked by the label-free score) and `best.json`. A short table is printed.
-   - Units already done are skipped, keyed by the gate hash. `--force` recomputes them.
-3. **G2, GPU.**
-   ```bash
-   python -m mgw.bench --set features.zscore_by=<chosen> --set field.sigma_z=<chosen> gates g2 --seeds 0-2
-   ```
-   - Output: `results/gates/gates_g2/rows.csv` and `summary.csv` (per embryo and variant, field against point cloud). Embryos with < 4 sections are skipped.
-4. **Rerun A on the chosen features, then the volumes on Dev (X1, X4, both directions), GPU.**
-   ```bash
-   S="--set features.zscore_by=<chosen> --set field.sigma_z=<chosen>"
-   python -m mgw.bench --config step3.yaml $S run --tier dev --pairs X1,X4 --pipelines A_fgw --seeds 0
-   python -m mgw.bench --config step3.yaml $S run --tier dev --pairs X1,X4 --pipelines V_fgw,PC_fgw,V_linear,V_gw --seeds 0
-   python -m mgw.bench --config step3.yaml $S report --tier dev
-   ```
-   - `reports/step3_dev/` holds the Go table with the columns V, PC, V_feat_OT, V_GW and dV / dPC (κ_bal minus A's), and `volumes.csv` with rejected mass, the L and depth reached, and the parallel-section consistency.
-   - N, τ, ε and k are pipeline parameters, e.g. `--set pipelines.V_fgw.params.n_samples=10000` or `...params.tau=0.9`. Every override enters only that pipeline's hash.
-   - The field and the volume are cached per pair, embryo, seed and field hash, so V_fgw, V_linear and V_gw share them.
-   - To see the depth of the matched mass in X4, look at `L_reached_rel` and `rejected_query` per direction in `volumes.csv`.
-5. **Rough cost per seed** (estimates, not measured on the data):
-   - A field (3000 steps, batch 2048) takes about 1 min on a GPU and 4–5 min on CPU.
-   - G1 trains one field per interior section, 15 for the four Dev embryos: about 15–20 min per setting and seed on a GPU. The default grid (2 × 3) on one seed takes about 2 h, plus the skip couplings once per embryo (moscot + OT-ICP, a few minutes).
-   - G2: 4 fields and 4 solves of 3000 × 3000 per embryo and variant, about 10–20 min per embryo.
-   - V_fgw on a pair: 2 fields, then one 6000 × 6000 FGW solve, a few minutes on a GPU (A's 5000 × 5000 solves take about 2 min each), then scoring.
-   - GPU memory for that solve: a few 6000² float32 matrices, < 2 GB. Host memory while scoring: one query section × N in float64, about 250 MB, with a peak of about 1.5 GB.
-   - N = 10000 roughly triples the solve time and memory.
-
-## Comparability across steps
-
-- **Hashes.** Every setting that changes a result enters a hash (see `mgw/bench/config.py`), and results live in `results/<pipeline>-<hash>/<pair>/seed<s>/`. Runs with other settings never overwrite each other, and an unchanged task is skipped.
-- **Shared schema.** `scores.csv` has one row per (direction, query, target, role), with the same columns for every pipeline. New pipelines add rows, never columns that old reports need.
-- **Recomputable metrics.** Every candidate keeps its exact organ × organ matrix C and the top-64 entries per row and column. The finals (selected, oracle) keep the dense P. Most new label metrics can be computed from what is stored.
-- **Moving reference.** [`configs/reference.yaml`](configs/reference.yaml) names the current reference and keeps the history. `report --reference history:<i>` recomputes Δκ against any earlier one.
-- **Frozen series.** [`configs/series.yaml`](configs/series.yaml) fixes the sections of every embryo, and each step uses the same pairs.
-
-## Adding pipelines (steps 4–6)
-
-A strategy is a function `run(task)` in `mgw/bench/pipelines/`, registered in `pipelines/__init__.py:STRATEGY` and allowed in `config.STRATEGIES` with its default parameters. It forms targets, solves, and calls `task.score(...)` for every coupling with a role (`candidate`, `selected`, `null:*`). Scoring, storage, the report and the viewer then work unchanged. Add the pipeline to a config file (e.g. `configs/step3.yaml`) and run the same commands.
-
-The volume strategy (`pipelines/volume.py`) works in three stages:
-1. It builds both stacks with `pipelines/stacked.get_stack` (stage 1), then fits and samples the fields (`field.get_field` / `get_volume`, cached), or takes the stack points (`representation: points`).
-2. It runs one 3D ↔ 3D solve per pair (`volume.stage2`, stage 2).
-3. It scores every real query section against the target volume with `task.score`:
-   - `P` = A_q P_vol, the query section's spots × the target's samples. A_q spreads each spot over its k nearest own samples.
-   - `xt` = the samples' 3D coordinates.
-   - `T_full` / `Yt` = the target bins / held-out genes pooled from the k nearest real target spots.
-
-Rows have role `selected`, so they compare directly with A's. Only the top-k is stored (`dense: []`).
-
-Step 4 adds aligners through the pipeline's `aligner` key: `volume.stage2` dispatches on it, and `config.ALIGNERS` lists the allowed names. For example, a Riemannian FGW would replace the Euclidean `dist_norm` of the samples with shortest paths. MGW would use the field itself (`Field.net.feat`) as φ.
-
-## The synthetic pair
-
-`mgw/bench/synthetic.py` writes, under any root, what `prepare` writes on the data server:
-- a 3D body with organs and smooth gene fields, some of which vary only in depth;
-- two homologous embryos cut into 6 and 4 rotated parallel sections, with partial depth overlap;
-- their section and feature caches, and a series `synthetic.yaml` with the cross pair `SX`.
-
-`write_stacks` builds their stacks with the real stage 1 but the true gaps. Then every command runs on it unchanged, e.g. `--root <dir> --set series=<dir>/synthetic.yaml --set features.pca_comp=8`. The tests (`tests/test_volume.py`) use it for end-to-end runs of V_fgw, PC_fgw, V_linear, the report, G1 and the G2 CLI. Its numbers say nothing about the method.
+- Every setting that changes a result enters a hash (`mgw/bench/config.py`). Runs with other settings never overwrite each other, and an unchanged task is skipped.
+- The caches:
+  - sections: `cache/sections/`, keyed by `reduce`;
+  - features: `cache/features/`, keyed by `reduce` and `features`;
+  - stacks: `cache/stacks/<embryo>/`, keyed by the above plus `stack`;
+  - fields and volumes: `cache/fields/`, `cache/volumes/`, keyed by the stack plus `field`.
+- `stack.coupling` enters the stack key only when it is not `moscot_icp`, so the first stacks keep their names. Each `S_*` tool builds and caches its own stacks. The 3D pipelines use the stacks of `stack.coupling`, and so do their fields.
+- The `mgw` block enters only the MGW pipelines, and `rfgw` only `V_rfgw`. `field.device` enters no hash.
 
 ## Notes
 
-- **Seeds.** Seed s reduces with Voronoi seed 42 + s and seeds the randomized PCAs with s, so seed 0 reproduces the 3D notebook's preprocessing.
-- **Cross-cost scale.** One per pair (the 0.99 quantile of all a × b feature distances), so a balanced FGW solve of (x, y) is the transpose of (y, x), and each pair of sections is solved once (`tests/test_solvers.py`). The notebook scales per query instead.
-- **No mirror solve in A.** FGW on Euclidean distances is invariant to reflections (`tests/test_solvers.py`); `orientation` reports the sign.
-- **Fold-overs.** The share of query points whose local Jacobian, fitted over 16 neighbours, flips against the majority orientation (2D targets), or whose image normal points against the mean normal (3D targets).
-- **K.** `metrics.presence: embryo` (default) scores the query organs present anywhere in the target embryo, so a target section that lacks an organ scores it 0 instead of dropping it. `presence: target` gives the first harness's K (each target alone). The setting enters the pipeline hash.
-- **Feature z-scoring.** `features.zscore_by: section` (default) z-scores genes within each section; `embryo` within each embryo, which keeps the depth offsets that a 3D field needs. G1 decides between them on a label-free score, and A then runs on the chosen features (doc §3, §6 step 2).
-- **Unbalanced solves.** OTT's unbalanced GW with `gw_unbalanced_correction` returns NaN at ε = 5e-3 and τ ≤ 0.9 in float32. `solvers.fgw` / `gw` then retry once without the correction and record `ugw_fallback` in the row.
-- **Tests.** `pytest` runs the following:
-  - the metric, solver and config tests;
-  - the field and measure tests, on a stack built from synthetic ground truth;
-  - the end-to-end tests of steps 2–3 on the synthetic pair, about 40 s on CPU.
-
-  On a machine with the four smoke sections, it also runs end-to-end checks of the cache and the compact storage.
+- **Seeds.** Seed s reduces with Voronoi seed 42 + s and seeds the PCAs, φ and the fields with s.
+- **Cross-cost scale.** There is one per pair: the 0.99 quantile of all a × b feature distances. A balanced FGW solve of (x, y) is then the transpose of (y, x), so each pair of sections is solved once.
+- **No mirror solve in 2D.** FGW on intra-section distances is invariant to reflections.
+- **K.** `metrics.presence: embryo` scores the query organs present anywhere in the target embryo. A target section that lacks an organ therefore scores 0 on it instead of dropping it. The `S_*` tools use the organs of both neighbouring sections.
+- **Unbalanced solves.** OTT's unbalanced GW with `gw_unbalanced_correction` can return NaN at ε = 5e-3 and τ ≤ 0.9 in float32. The solve then retries once without the correction and logs `ugw fallback`.
+- **Cost.**
+  - `A_mgw` trains one φ per section (20k steps), then runs the same FGW grid as `A_fgw`.
+  - `V_rfgw` and `V_mgw` run an all-pairs Dijkstra on the 6000 samples per embryo (CPU), before the same FGW solve as `V_fgw`.
+- **Tests.** `pytest` runs the unit tests of κ_bal, the config hashes and the solver. The pipelines are checked by real runs on the LNT servers.

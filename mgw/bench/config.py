@@ -1,19 +1,17 @@
 """Benchmark configuration: one YAML file, validated against DEFAULTS, frozen, hashed.
 
-A config holds the parameter groups shared by every pipeline (reduce, features, fgw, stack, metrics) and the
-pipelines themselves (strategy + aligner + params). `--set a.b=c` overrides any value before validation; the value
-is parsed as YAML (`--set reduce.max_obs=1000`, `--set fgw.epsilon=1e-3`).
+A config holds the parameter groups shared by every pipeline (reduce, features, fgw, stack, field, mgw, rfgw, metrics)
+and the pipelines themselves (strategy + aligner + params). `--set a.b=c` overrides any value before validation; the
+value is parsed as YAML (`--set reduce.max_obs=1000`, `--set fgw.epsilon=1e-3`).
 
 Hashes name the caches and the result folders, so results of different settings never mix:
 - section cache:  reduce
 - feature cache:  reduce + features (features.zscore_by only when not "section", so the first caches stay valid)
-- stack cache:    reduce + features + stack + fgw.alpha (the order inference uses the FGW objective)
-- field cache:    the stack's key + field (minus `device`): the trained weights and the sampled volumes (§1c, §1d)
-- a pipeline:     reduce + features + fgw + metrics + its aligner's params + its spec (+ stack if it uses one, + field
-                  for the volume strategy on a field)
-- a gate unit:    the field's key + the gate's scoring settings (G1), + fgw and stage 2 (G2)
-Guardrail and noise settings are report-time only and never enter a hash. The blocks `field` and `gates` enter only
-the hashes of the volume pipelines and the gates, so the caches and results of step 1 keep their names.
+- stack cache:    reduce + features + stack + fgw.alpha (the order inference uses the FGW objective); stack.coupling
+                  only when it is not "moscot_icp" (the first caches keep their names), plus the mgw block for "mgw_icp"
+- field cache:    the stack's key + field (minus `device`): the trained weights and the sampled volumes
+- a pipeline:     reduce + features + fgw + metrics + its spec (+ the stack it uses, + field for the volume strategy on
+                  a field, + the mgw / rfgw block for those aligners)
 """
 import copy
 import hashlib
@@ -27,29 +25,34 @@ import yaml
 REPO = Path(__file__).resolve().parents[2]
 CONFIG_DIR = REPO / "bench" / "configs"
 
+# the within-embryo coupling of neighbouring sections (stage 1); see stack.register_sections
+COUPLINGS = ("moscot_icp", "moscot_procrustes", "mgw_icp")
+
 STRATEGIES = {
     # strategy: (needs a stack, default params)
+    # 2D <-> 2D: every query section against every real target section, the target chosen by the objective
     "real2d": (False, {}),
-    # stage 2 between two embryos as 3D measures (§1e): field-sampled volumes, or the registered stack points with
-    # slab masses (representation: points, the ablation without a field); back to the real spots as in §1f
+    # within embryo: build both stacks with `coupling` and score every kept neighbour coupling
+    "stack": (True, {"coupling": "moscot_icp"}),
+    # 3D <-> 3D: one stage-2 solve between the embryos as 3D measures, scored on the real query spots
     "volume": (True, {
-        "representation": "field",       # field | points
+        "representation": "field",       # field (sampled volume) | points (the registered stack points)
         "n_samples": 6000,               # points per embryo, equal for both; `points` subsamples to at most this
         "tau": 0.95,                     # unbalanced on both sides with the same tau (1 = balanced)
-        "epsilon": None,                 # None: fgw.epsilon (FGW), aligners.<name>.epsilon (the nulls)
+        "epsilon": None,                 # None: fgw.epsilon
         "unbalanced_correction": True,   # OTT's gw_unbalanced_correction; a NaN solve is retried without it
-        "k_query": 8,                    # A_q: a query spot spreads over its k nearest samples (Gaussian, spacing)
-        "k_target": 3,                   # B_t: a target sample pools the bins of its k nearest real target spots
+        "k_query": 8,                    # a query spot spreads over its k nearest samples (Gaussian, spacing)
+        "k_target": 3,                   # a target sample pools the bins of its k nearest real target spots
     }),
 }
-ALIGNERS = ("fgw", "linear", "spatial_gw", "scot")
-KINDS = ("cross", "between", "within")
-ROLES_DENSE = ("selected", "oracle", "L_partner")
+# fgw: Euclidean intra costs; mgw: geodesics under the pull-back metric of a learned phi (2D, one per section) or of
+# the field's features (3D); rfgw: shortest paths in a Euclidean kNN graph (3D)
+ALIGNERS = {"real2d": ("fgw", "mgw"), "stack": ("fgw",), "volume": ("fgw", "mgw", "rfgw")}
+KINDS = ("cross",)
 
 DEFAULTS = {
     "name": "unnamed",
     "series": "series.yaml",
-    "reference": "reference.yaml",
     "reduce": {
         "max_obs": 5000,
         "subsample": "voronoi",
@@ -84,53 +87,38 @@ DEFAULTS = {
         "section_flip": "auto",
         "global_sweeps": 2,
         "z_gaps": None,
+        "coupling": "moscot_icp",        # the within-embryo coupling the volume pipelines build their stacks with
     },
-    "aligners": {
-        "linear": {"epsilon": 5e-3},
-        "spatial_gw": {"epsilon": 5e-3},
-        "scot": {"epsilon": 5e-3},
-        "rigid": {"icp_lambda": 0.5, "icp_iter": 15, "icp_eps": 5e-3},
-    },
-    "field": {                       # the field of §1c (one per embryo, pair features, seed); `device` is not hashed
+    "field": {                           # one field per embryo, pair features and seed; `device` is not hashed
         "width": 128,
         "depth": 3,
-        "n_freq": 64,                # Fourier frequencies (sin and cos each), Gaussian with the bandwidths below
-        "sigma_xy": 4.0,             # in-plane bandwidth, cycles per stack radius
-        "sigma_z": 1.0,              # depth bandwidth: lower, the data are coarser along z
+        "n_freq": 64,                    # Fourier frequencies (sin and cos each), Gaussian with the bandwidths below
+        "sigma_xy": 4.0,                 # in-plane bandwidth, cycles per stack radius
+        "sigma_z": 1.0,                  # depth bandwidth: lower, the data are coarser along z
         "steps": 3000,
         "batch": 2048,
         "lr": 2.0e-3,
-        "lambda_depth": 1.0,         # the depth loss along the displacement pairs
-        "lambda_occ": 0.5,           # occupancy (binary cross-entropy)
-        "lambda_smooth": 1.0e-3,     # ||J_f||_F^2
-        "occ_out": 2.0,              # negatives: farther than this many spot spacings from tissue / every segment
-        "occ_jitter": 0.5,           # positives along the segments, jittered in-plane by this many spot spacings
-        "device": "auto",            # auto | cpu | cuda
+        "lambda_depth": 1.0,             # the depth loss along the displacement pairs
+        "lambda_occ": 0.5,               # occupancy (binary cross-entropy)
+        "lambda_smooth": 1.0e-3,         # ||J_f||_F^2
+        "occ_out": 2.0,                  # negatives: farther than this many spot spacings from tissue / every segment
+        "occ_jitter": 0.5,               # positives along the segments, jittered in-plane by this many spot spacings
+        "device": "auto",                # auto | cpu | cuda
     },
-    "gates": {
-        "embryos": {},               # embryo -> the pair whose features its field regresses (the stage-2 pair)
-        "factor": 2.0,               # seed-noise margin: factor x the SD over seeds (report time)
-        "g1": {"k_regressor": 15, "grid": {}, "zscore_by": ["section"]},
-        "g2": {"n_samples": 3000, "tau": 0.95, "epsilon": None, "unbalanced_correction": True, "k_query": 8,
-               "min_sections": 4, "variants": ["common", "reest"]},
+    "mgw": {                             # MGW's phi (2D) and its geodesics (2D and 3D); defaults of mgw.mgw_align
+        "widths": [128, 256, 256, 128],
+        "lr": 1.0e-3,
+        "niter": 20000,
+        "knn_k": 12,
+        "geodesic_eps": 1.0e-2,
     },
+    "rfgw": {"knn_k": 12},               # the kNN graph of Riemannian FGW
     "pipelines": {},
     "metrics": {
-        "present_min_bins": 5,
-        "present_min_tiles": 1,
-        "coverage_share": 0.1,
-        "foldover_k": 16,
-        "topk": 64,
-        "presence": "embryo",
+        "present_min_bins": 5,           # an organ is present on a side with >= 5 bins (full resolution)
+        "presence": "embryo",            # K: the query's organs present in the whole target embryo (or "target")
     },
-    "guardrails": {
-        "regret_max": 0.05,
-        "foldover_max": 0.05,
-        "end_fraction": 0.34,
-        "end_pass_share": 0.75,
-    },
-    "noise": {"pipeline": "A_fgw", "tier": "dev", "factor": 2.0},
-    "seeds": {"smoke": [0], "dev": [0, 1, 2, 3, 4], "screen": [0], "full": [0]},
+    "seeds": {"smoke": [0], "dev": [0, 1, 2], "screen": [0], "full": [0]},
 }
 
 PIPELINE_DEFAULTS = {
@@ -138,8 +126,6 @@ PIPELINE_DEFAULTS = {
     "aligner": "fgw",
     "kinds": ["cross"],
     "params": {},
-    # what is written besides the scores: top-k rows/columns per candidate, dense P for these roles
-    "store": {"topk": True, "dense": ["selected", "oracle"], "dense_kinds": ["cross"]},
 }
 
 
@@ -148,7 +134,7 @@ def _merge(base, over, path=""):
     out = copy.deepcopy(base)
     for k, v in over.items():
         p = f"{path}.{k}" if path else k
-        if k not in base and path not in ("pipelines", "aligners", "seeds"):
+        if k not in base and path not in ("pipelines", "seeds"):
             raise KeyError(f"unknown config key {p!r}")
         if isinstance(v, dict) and isinstance(base.get(k), dict) and path != "pipelines":
             out[k] = _merge(base[k], v, p) if base[k] else copy.deepcopy(v)
@@ -176,8 +162,8 @@ def _validate_pipeline(name, spec):
     spec = _merge(PIPELINE_DEFAULTS, spec, f"pipelines.{name}")
     if spec["strategy"] not in STRATEGIES:
         raise ValueError(f"pipeline {name}: strategy must be one of {sorted(STRATEGIES)}")
-    if spec["aligner"] not in ALIGNERS:
-        raise ValueError(f"pipeline {name}: aligner must be one of {ALIGNERS}")
+    if spec["aligner"] not in ALIGNERS[spec["strategy"]]:
+        raise ValueError(f"pipeline {name}: aligner must be one of {ALIGNERS[spec['strategy']]}")
     bad = set(spec["kinds"]) - set(KINDS)
     if bad:
         raise ValueError(f"pipeline {name}: unknown kinds {sorted(bad)}")
@@ -186,8 +172,13 @@ def _validate_pipeline(name, spec):
     if unknown:
         raise KeyError(f"pipeline {name}: unknown params {sorted(unknown)} for strategy {spec['strategy']}")
     spec["params"] = {**pdef, **spec["params"]}
-    if spec["strategy"] == "volume" and spec["params"]["representation"] not in ("field", "points"):
-        raise ValueError(f"pipeline {name}: representation must be field or points")
+    if spec["strategy"] == "volume":
+        if spec["params"]["representation"] not in ("field", "points"):
+            raise ValueError(f"pipeline {name}: representation must be field or points")
+        if spec["aligner"] != "fgw" and spec["params"]["representation"] != "field":
+            raise ValueError(f"pipeline {name}: aligner {spec['aligner']} needs representation field")
+    if spec["strategy"] == "stack" and spec["params"]["coupling"] not in COUPLINGS:
+        raise ValueError(f"pipeline {name}: coupling must be one of {COUPLINGS}")
     spec["needs_stack"] = needs_stack
     return spec
 
@@ -233,8 +224,13 @@ class Config:
             del f["zscore_by"]
         return dict(reduce=self.raw["reduce"], features=f)
 
-    def stack_key(self):
-        return dict(**self.feature_key(), stack=self.raw["stack"], fgw_alpha=self.raw["fgw"]["alpha"])
+    def stack_key(self, coupling=None):
+        """The stack's settings, with `coupling` in place of stack.coupling if given."""
+        st = dict(self.raw["stack"], coupling=coupling or self.raw["stack"]["coupling"])
+        extra = {"mgw": self.raw["mgw"]} if st["coupling"] == "mgw_icp" else {}
+        if st["coupling"] == "moscot_icp":   # the coupling of the first caches, which had no such key
+            del st["coupling"]
+        return dict(**self.feature_key(), stack=st, fgw_alpha=self.raw["fgw"]["alpha"], **extra)
 
     def section_hash(self):
         return short_hash(self.section_key())
@@ -242,8 +238,8 @@ class Config:
     def feature_hash(self):
         return short_hash(self.feature_key())
 
-    def stack_hash(self):
-        return short_hash(self.stack_key())
+    def stack_hash(self, coupling=None):
+        return short_hash(self.stack_key(coupling))
 
     def field_key(self):
         return dict(**self.stack_key(), field={k: v for k, v in self.raw["field"].items() if k != "device"})
@@ -251,26 +247,16 @@ class Config:
     def field_hash(self):
         return short_hash(self.field_key())
 
-    def gate_key(self, gate):
-        """What one gate unit (embryo, seed) depends on: G1 the field and the regressor; G2 the field and stage 2."""
-        g = self.raw["gates"][gate]
-        if gate == "g1":
-            return dict(**self.field_key(), g1=dict(k_regressor=g["k_regressor"]))
-        return dict(**self.field_key(), fgw=self.raw["fgw"], g2={k: v for k, v in g.items() if k != "min_sections"})
-
-    def gate_hash(self, gate):
-        return short_hash(self.gate_key(gate))
-
     def pipeline_key(self, name):
         spec = self.raw["pipelines"][name]
         key = dict(**self.feature_key(), fgw=self.raw["fgw"], metrics=self.raw["metrics"],
                    spec={k: v for k, v in spec.items() if k != "kinds"})
-        if spec["aligner"] != "fgw":
-            key["aligner"] = self.raw["aligners"].get(spec["aligner"], {})
-        if name == "A_fgw" or spec["strategy"] == "real2d":
-            key["rigid"] = self.raw["aligners"]["rigid"]
-        if spec["needs_stack"]:
-            key["stack"] = self.raw["stack"]
+        if spec["aligner"] in ("mgw", "rfgw"):
+            key[spec["aligner"]] = self.raw[spec["aligner"]]
+        if spec["strategy"] == "stack":
+            key["stack"] = self.stack_key(spec["params"]["coupling"])
+        elif spec["needs_stack"]:
+            key["stack"] = self.stack_key()
         if spec["strategy"] == "volume" and spec["params"]["representation"] == "field":
             key["field"] = self.field_key()["field"]
         return key
@@ -286,17 +272,14 @@ class Config:
         p = Path(self.raw["series"])
         return p if p.is_absolute() else (self.path.parent if self.path else CONFIG_DIR) / p
 
-    def reference_path(self):
-        p = Path(self.raw["reference"])
-        return p if p.is_absolute() else (self.path.parent if self.path else CONFIG_DIR) / p
-
 
 def from_dict(raw, path=None, overrides=()):
     raw = apply_overrides(raw, overrides)
     cfg = _merge(DEFAULTS, raw)
     for k, v, ok in (("features.zscore_by", cfg["features"]["zscore_by"], ("section", "embryo")),
                      ("metrics.presence", cfg["metrics"]["presence"], ("embryo", "target")),
-                     ("field.device", cfg["field"]["device"], ("auto", "cpu", "cuda"))):
+                     ("field.device", cfg["field"]["device"], ("auto", "cpu", "cuda")),
+                     ("stack.coupling", cfg["stack"]["coupling"], COUPLINGS)):
         if v not in ok:
             raise ValueError(f"{k} must be one of {ok}")
     cfg["pipelines"] = {n: _validate_pipeline(n, s) for n, s in cfg["pipelines"].items()}
@@ -309,8 +292,8 @@ def from_dict(raw, path=None, overrides=()):
 
 
 def load(path=None, overrides=()):
-    """Load a YAML config (default: bench/configs/step1.yaml) with `key=value` overrides."""
-    path = Path(path) if path else CONFIG_DIR / "step1.yaml"
+    """Load a YAML config (default: bench/configs/bench.yaml) with `key=value` overrides."""
+    path = Path(path) if path else CONFIG_DIR / "bench.yaml"
     if not path.exists() and (CONFIG_DIR / path).exists():
         path = CONFIG_DIR / path
     with open(path) as fh:

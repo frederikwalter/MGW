@@ -1,5 +1,6 @@
-"""The two solver properties the harness relies on: one balanced solve serves both directions (P and P^T), and
-the mirror image of a query gives the same FGW coupling (so A does not try it)."""
+"""The solver properties the harness relies on: one balanced solve serves both directions (P and P^T), the mirror
+image of a query gives the same FGW coupling (so 2D does not try it), and an unbalanced 3D solve with equal tau
+rejects the unmatched depth and stays symmetric."""
 import numpy as np
 import pytest
 from scipy.spatial.distance import cdist
@@ -75,17 +76,3 @@ def test_unbalanced_fgw_3d_rejects_the_unmatched_depth(slab_pair):
     # equal tau on both sides: one solve serves both directions
     P2, _ = solvers.fgw(xb, xa, M.T, P_FAST, tau_a=0.95, tau_b=0.95)
     assert np.abs(P - P2.T).sum() / P.sum() < 0.05
-
-
-def test_stage2_aligners_and_masses(slab_pair):
-    from mgw.bench import volume
-    xa, xb, M, inside = slab_pair
-    Fa, Fb = xa * [1, 1, 3], xb * [1, 1, 3]
-    a = np.r_[np.full(80, 2.0), np.ones(80)]
-    for aligner in ("fgw", "linear"):
-        P, obj, info = volume.stage2(aligner, xa, xb, Fa, Fb, 1.0, P_PARAMS, a=a / a.sum(), tau=0.95,
-                                     aligner_eps=5e-3)
-        rej_a, rej_b, mass = volume.rejected(P, a, None)
-        assert P.shape == (160, 110) and np.isfinite(obj) and 0 <= rej_a < 1 and 0 <= rej_b < 1 and mass > 0
-    with pytest.raises(ValueError):
-        volume.stage2("bogus", xa, xb, Fa, Fb, 1.0, P_PARAMS)
