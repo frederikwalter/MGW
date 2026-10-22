@@ -2,11 +2,9 @@
 
 results/<pipeline>-<hash8>/<pair>/seed<s>/
   manifest.json     config (resolved), hashes, commit, host, devices, versions, timings, status
-  scores.csv        one row per (direction, query, target, role); the schema every step shares
-  candidates.npz    per candidate "<direction>|<query>|<target>|<field>": C_full, C_red (organs x organs),
-                    top-k rows/cols (if stored), pred (uint8), conf (float16), folded (bool)
-  targets.npz       geometry of synthetic targets (e.g. a sampled volume): xy or xyz, comp, label
-  couplings/<direction>__<query>__<role>.npz   dense P for the finals that keep it (float16, scaled by n_q * n_t)
+  scores.csv        one row per (direction, query, target, role): kappa_bal, K, objective, seconds
+  transfer.npz      per selected row "<direction>|<query>": the transferred organ of every query spot (uint8, the
+                    index into metrics.ORGANS), for the label-transfer figure
 """
 import json
 import os
@@ -21,7 +19,7 @@ import pandas as pd
 
 from mgw.bench.config import REPO, canonical
 
-SCORE_ID = ["pipeline", "hash", "pair", "pair_kind", "seed", "direction", "direction_label", "query", "target", "role"]
+SCORE_ID = ["pipeline", "hash", "pair", "seed", "direction", "direction_label", "query", "target", "role"]
 
 
 def safe(name):
@@ -73,7 +71,7 @@ def is_done(d, cfg, pipeline):
 def write_manifest(d, cfg, pipeline, pair, seed, status, started, extra=None):
     d = Path(d)
     d.mkdir(parents=True, exist_ok=True)
-    man = dict(status=status, pipeline=pipeline, hash=cfg.pipeline_hash(pipeline), pair=pair.id, pair_kind=pair.kind,
+    man = dict(status=status, pipeline=pipeline, hash=cfg.pipeline_hash(pipeline), pair=pair.id,
                seed=seed, started=started, finished=time.strftime("%Y-%m-%dT%H:%M:%S"),
                config_file=str(cfg.path) if cfg.path else None, overrides=list(cfg.overrides),
                pipeline_key=json.loads(canonical(cfg.pipeline_key(pipeline))), env=env_info(), **(extra or {}))
@@ -92,16 +90,6 @@ def write_scores(d, rows):
     return df
 
 
-def write_table(path, df):
-    """A DataFrame as CSV, written atomically (gate tables and summaries)."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.stem + f".tmp{os.getpid()}.csv")
-    pd.DataFrame(df).to_csv(tmp, index=False)
-    os.replace(tmp, path)
-    return path
-
-
 def savez(path, **arrays):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -110,19 +98,9 @@ def savez(path, **arrays):
     os.replace(tmp, path)
 
 
-def key(direction, query, target, field):
-    return f"{direction}|{query}|{target}|{field}"
-
-
-def save_dense(d, direction, query, role, P):
-    n_q, n_t = P.shape
-    savez(Path(d) / "couplings" / f"{direction}__{safe(query)}__{role}.npz",
-          P=(np.asarray(P, dtype=np.float64) * (n_q * n_t)).astype(np.float16), scale=float(n_q * n_t))
-
-
-def load_dense(path):
-    z = np.load(path)
-    return z["P"].astype(np.float32) / float(z["scale"])
+def key(direction, query):
+    """The key of a query's transferred labels in transfer.npz."""
+    return f"{direction}|{query}"
 
 
 # ---------- loading results

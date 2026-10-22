@@ -1,11 +1,11 @@
-"""The field of an embryo and the volume sampled from it (docs/st_3d_alignment_strategies.md §1c, §1d).
+"""The field of an embryo and the volume sampled from it.
 
 One field per (embryo, pair features, seed), in the frame of the registered stack (`pipelines/stacked`):
 x = (x, y, z) -> (f(x), o(x)), f the pair's ortholog embedding (the features of the cross cost), o the tissue
 occupancy in [0, 1]. A small MLP on anisotropic Fourier features: frequencies ~ N(0, sigma_xy^2) in-plane and
 N(0, sigma_z^2) in depth (lower: the data are coarser along z), plus the raw coordinates.
 
-Losses (§1c), on the real spots only (never an interpolated point as a feature target, never held-out genes or labels):
+Losses, on the real spots only (never an interpolated point as a feature target, never held-out genes or labels):
 1. features: |f(x_i) - e_i|^2 over minibatches of real spots;
 2. depth: for a displacement pair (i in section k, j in k + 1; the peaks of the rows and columns of the stack's
    neighbour coupling, sampled by mass, every gap the same total weight) and x(t) = (1 - t) x_i + t x_j,
@@ -18,14 +18,14 @@ Losses (§1c), on the real spots only (never an interpolated point as a feature 
 Coordinates are centred and divided by the stack's in-plane RMS radius (one scale for all axes, so Jacobians and
 spacings keep their meaning); features are centred and divided by their RMS per dimension.
 
-Sampling (§1d): scrambled Sobol points in the box [in-plane bounding box of the spots + 2 spacings] x [z_first,
+Sampling: scrambled Sobol points in the box [in-plane bounding box of the spots + 2 spacings] x [z_first,
 z_last] (the domain is clipped to the outermost sections), kept where o > 0.5, the first N in Sobol order. The box
 is in stack units, in which z (the variogram gaps) and xy share one scale, so the density is isotropic: the sample
 spacing h = (box volume x acceptance / N)^(1/3) is the same along every axis. Masses are equal; features are f(x).
 
 Caches under the bench root: cache/fields/<pair>/<embryo>/seed<s>_<field hash>_<variant>.pt (weights and
 normalization) and cache/volumes/<pair>/<embryo>/seed<s>_<field hash>_<variant>_n<N>.npz (the sampled volume). The
-variant names the stack the field was fitted to: `full`, `loo<k>` (G1), `odd_common`, `even_reest` (G2).
+variant names the stack the field was fitted to (`full`).
 """
 import math
 import os
@@ -99,6 +99,17 @@ class FieldNet(torch.nn.Module):
 
     def occ(self, x):
         return self.o_head(self.trunk(self.encode(x))).squeeze(-1)
+
+
+class FeatureMap(torch.nn.Module):
+    """The feature head of a FieldNet as a module of its own (normalized coordinates -> f): MGW's phi in 3D."""
+
+    def __init__(self, net):
+        super().__init__()
+        self.net = net
+
+    def forward(self, x):
+        return self.net.feat(x)
 
 
 # ---------- the training data of one stack
@@ -279,7 +290,7 @@ def fit(ST, F, p: FieldParams, seed=0, log=None):
     return Field(net, meta)
 
 
-# ---------- sampling (§1d)
+# ---------- sampling
 def sample(field, n, seed=0, max_draws=1 << 24):
     """N quasi-uniform points of the field's volume: scrambled Sobol in the box, kept where o > 0.5, the first N in
     Sobol order. Returns dict(xyz, F, occ, spacing, accept, n_draws)."""

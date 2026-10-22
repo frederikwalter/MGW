@@ -1,13 +1,14 @@
-"""Pipelines: a strategy (how targets are formed and chosen) with an aligner. One task = (pipeline, pair, seed)."""
+"""Pipelines: a strategy (how targets are formed) with an aligner. One task = (pipeline, pair, seed)."""
 import time
 import traceback
 
 from mgw.bench import store
-from mgw.bench.pipelines import real2d, volume as volume_strategy
+from mgw.bench.pipelines import real2d, stack_eval, volume as volume_strategy
 from mgw.bench.pipelines.common import Task
 
 STRATEGY = {
     "real2d": real2d.run,
+    "stack": stack_eval.run,
     "volume": volume_strategy.run,
 }
 
@@ -48,9 +49,9 @@ def run_task(cfg, pipeline, pair, seed, root, force=False, log=print):
     store.write_manifest(out, cfg, pipeline, pair, seed, "done", started,
                          extra=dict(timings=task.timings, n_rows=len(df), cost_scale=task.scale,
                                     peak_device_bytes=_peak_device_bytes()))
-    sel = df[df.role == "selected"]
-    if len(sel):
-        log(f"[done] {pipeline} {pair.id} seed {seed}: kappa_bal (selected) "
-            + ", ".join(f"{d} {g.kappa_bal.mean():.3f}" for d, g in sel.groupby("direction_label"))
+    fin = df[df.role != "candidate"]
+    if len(fin):
+        log(f"[done] {pipeline} {pair.id} seed {seed}: kappa_bal "
+            + ", ".join(f"{d} {g.kappa_bal.mean():.3f}" for d, g in fin.groupby("direction_label"))
             + f"; {task.timings['total']:.0f} s")
     return out

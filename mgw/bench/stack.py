@@ -2,8 +2,12 @@
 
 1. Order: the file order, or inferred from the data (FGW objective between all pairs of sections, then the shortest
    open path; `stack3d.infer_order`).
-2. Registration: neighbours matched by FGW (moscot), refined by OT-ICP (rotation or reflection), composed into the
-   frame of the middle section and re-fitted to both neighbours (global sweeps).
+2. Registration: a coupling of every pair of neighbours and a rigid placement from it (`coupling`):
+   - moscot_icp: FGW (moscot), refined by OT-ICP (rotation or reflection, the lower cost);
+   - moscot_procrustes: the same FGW coupling and one weighted Procrustes fit (reflection where FGW's implied
+     orientation is one), no OT-ICP: what OT-ICP adds;
+   - mgw_icp: FGW on MGW geodesics (solvers.mgw_cost, one phi per section), refined by OT-ICP.
+   Then composed into the frame of the middle section and re-fitted to both neighbours (global sweeps).
 3. Gaps: from the in-plane variogram (`stack3d.estimate_gap`), or given.
 4. The stack: every point with (x, y) in the reference frame and z from the gaps, plus the displacement pairs of the
    neighbour couplings (the edges that virtual sections are cut along).
@@ -35,6 +39,7 @@ class StackParams:
     section_flip: object = "auto"  # "auto": rotation or reflection by the lower cost; False: rotations only
     global_sweeps: int = 2
     z_gaps: object = None        # None: estimated; or n_sections - 1 gaps in stack units
+    coupling: str = "moscot_icp"  # moscot_icp | moscot_procrustes | mgw_icp (config.COUPLINGS)
 
     @classmethod
     def from_mapping(cls, d):
@@ -73,20 +78,50 @@ def infer_section_order(xy_raw, feats, params, fgw_alpha, seed=0):
     return list(order), D
 
 
-def register_sections(names, xy_raw, feats, params):
-    """Rigid registration of neighbouring sections into the frame of the middle one (in stack order).
+def _procrustes_once(xa, xb, P0, det0, flip):
+    """One weighted Procrustes fit of b onto a from P0, with the format of s3.register_pair (P is P0 itself)."""
+    reflect = {"auto": det0 < 0, False: False, True: True}[flip]
+    R, t = s3.procrustes([(xa, xb, P0)], reflect=reflect)
+    W = P0 / P0.sum()
+    rmsd = float(np.sqrt((W * cdist(xa, xb @ R + t, "sqeuclidean")).sum()))
+    return dict(R=R, t=t, P=W, reflected=bool(reflect), rmsd=rmsd, cost_rotation=np.nan, cost_reflection=np.nan,
+                history=[])
+
+
+def neighbour_coupling(xa, xb, fa, fb, params, Ca=None, Cb=None):
+    """The first coupling of two neighbouring sections: FGW with moscot, or (Ca, Cb given: the MGW costs) FGW on those
+    intra-section costs with the same spatial weight and epsilon."""
+    if Ca is None:
+        return solvers.moscot_pair(xa, fa, xb, fb, params.pair_alpha, params.pair_eps)
+    M = cdist(fa, fb)
+    M /= np.quantile(M, 0.99)
+    p = solvers.FGWParams(alpha=params.pair_alpha, epsilon=params.pair_eps)
+    return solvers.fgw(None, None, M, p, Ca=Ca, Cb=Cb)[0]
+
+
+def register_sections(names, xy_raw, feats, params, mgw=None, seed=0, log=None):
+    """Rigid registration of neighbouring sections into the frame of the middle one (in stack order), with the
+    coupling of params.coupling (mgw: the config's mgw block, for mgw_icp).
 
     Returns dict(T, couplings, reg_rows, flips, reg_xy, ref).
     """
     n = len(names)
     ref = n // 2
+    if params.coupling not in ("moscot_icp", "moscot_procrustes", "mgw_icp"):
+        raise ValueError(f"unknown stack coupling {params.coupling!r}")
+    C = [None] * n
+    if params.coupling == "mgw_icp" and n > 1:
+        C = [solvers.mgw_cost(xy_raw[k], feats[k], mgw, seed=seed, log=log) for k in range(n)]
     pair_T, couplings, rows = [], [], []
     for k in range(n - 1):
         fa, fb = feats[k], feats[k + 1]
-        P0 = solvers.moscot_pair(xy_raw[k], fa, xy_raw[k + 1], fb, params.pair_alpha, params.pair_eps)
+        P0 = neighbour_coupling(xy_raw[k], xy_raw[k + 1], fa, fb, params, C[k], C[k + 1])
         det0 = cs.orientation_det(xy_raw[k + 1], xy_raw[k], P0.T)
-        reg = s3.register_pair(xy_raw[k], xy_raw[k + 1], fa, fb, P0, flip=params.section_flip,
-                               lam=params.icp_lambda, n_iter=params.icp_iter, epsilon=params.icp_eps)
+        if params.coupling == "moscot_procrustes":
+            reg = _procrustes_once(xy_raw[k], xy_raw[k + 1], P0, det0, params.section_flip)
+        else:
+            reg = s3.register_pair(xy_raw[k], xy_raw[k + 1], fa, fb, P0, flip=params.section_flip,
+                                   lam=params.icp_lambda, n_iter=params.icp_iter, epsilon=params.icp_eps)
         pair_T.append(s3.homogeneous(reg["R"], reg["t"]))
         couplings.append(reg["P"])
         rows.append(dict(pair=f"{names[k]} → {names[k + 1]}", fgw_det=det0, reflected=reg["reflected"],
@@ -139,8 +174,9 @@ def assemble(names, reg_xy, z, labels, feats, couplings, feat_key="X_feat"):
     return ST
 
 
-def build_stack(names, xy_raw, feats, labels, params, *, dataset, fgw_alpha, dL_raw=None, seed=0):
-    """Order, registration, gaps and assembly. Inputs are lists in file order; xy_raw in stack units.
+def build_stack(names, xy_raw, feats, labels, params, *, dataset, fgw_alpha, dL_raw=None, seed=0, mgw=None, log=None):
+    """Order, registration, gaps and assembly. Inputs are lists in file order; xy_raw in stack units; mgw: the config's
+    mgw block (coupling mgw_icp).
 
     Returns (ST, diag) with diag = dict(order, mode, D, reg, gaps).
     """
@@ -155,7 +191,7 @@ def build_stack(names, xy_raw, feats, labels, params, *, dataset, fgw_alpha, dL_
     if dL_raw is not None:
         Ls = pick(list(dL_raw))
         dL = [abs(Ls[k + 1] - Ls[k]) for k in range(len(Ls) - 1)]
-    reg = register_sections(names, xy_raw, feats, params)
+    reg = register_sections(names, xy_raw, feats, params, mgw=mgw, seed=seed, log=log)
     gp = estimate_gaps(names, reg["reg_xy"], feats, params.z_gaps, dL)
     ST = assemble(names, reg["reg_xy"], gp["z"], labels, feats, reg["couplings"])
     return ST, dict(order=order, mode=mode, D=D, reg=reg, gaps=gp)
@@ -230,4 +266,5 @@ def from_arrays(z):
     ST["reg_xy"] = [ST["xyz"][ST["offsets"][k]:ST["offsets"][k + 1], :2] for k in range(len(names))]
     ST["transforms"] = np.asarray(z["transforms"])
     ST["order_mode"] = str(z["mode"])
+    ST["couplings"] = [np.asarray(z[f"coupling_{k}"], dtype=np.float64) for k in range(n_pairs)]
     return ST
