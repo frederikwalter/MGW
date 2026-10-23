@@ -29,6 +29,7 @@ variant names the stack the field was fitted to (`full`).
 """
 import math
 import os
+import time
 from dataclasses import dataclass, fields
 from pathlib import Path
 
@@ -54,7 +55,10 @@ class FieldParams:
     lambda_smooth: float = 1e-3
     occ_out: float = 2.0
     occ_jitter: float = 0.5
+    residual: bool = False       # residual blocks after an input projection (deep nets)
+    layernorm: bool = False      # pre-LayerNorm in the residual blocks
     device: str = "auto"
+    tf32: bool = False           # TF32 matmuls (A100 / H100); not part of the result's hash
 
     @classmethod
     def from_mapping(cls, d):
@@ -70,8 +74,23 @@ def torch_device(name="auto"):
     return torch.device(name)
 
 
+class _Residual(torch.nn.Module):
+    """h + Linear(SiLU(LayerNorm?(h)))."""
+
+    def __init__(self, width, layernorm):
+        super().__init__()
+        self.norm = torch.nn.LayerNorm(width) if layernorm else torch.nn.Identity()
+        self.lin = torch.nn.Linear(width, width)
+
+    def forward(self, h):
+        return h + self.lin(torch.nn.functional.silu(self.norm(h)))
+
+
 class FieldNet(torch.nn.Module):
-    """x (normalized, n x 3) -> (f (n x d), occupancy logit (n,)) on anisotropic Fourier features."""
+    """x (normalized, n x 3) -> (f (n x d), occupancy logit (n,)) on anisotropic Fourier features.
+
+    The trunk is a plain SiLU MLP of `depth` layers, or (residual) an input projection followed by `depth` residual
+    blocks, optionally pre-LayerNorm, and a final SiLU."""
 
     def __init__(self, d_out, p: FieldParams, seed=0):
         super().__init__()
@@ -79,10 +98,15 @@ class FieldNet(torch.nn.Module):
         scale = torch.tensor([p.sigma_xy, p.sigma_xy, p.sigma_z], dtype=torch.float32)[:, None]
         self.register_buffer("B", torch.randn(3, p.n_freq, generator=g) * scale)
         torch.manual_seed(int(seed))
-        layers, d_in = [], 3 + 2 * p.n_freq
-        for _ in range(p.depth):
-            layers += [torch.nn.Linear(d_in, p.width), torch.nn.SiLU()]
-            d_in = p.width
+        d_in = 3 + 2 * p.n_freq
+        if p.residual:
+            layers = [torch.nn.Linear(d_in, p.width)] + [_Residual(p.width, p.layernorm) for _ in range(p.depth)]
+            layers.append(torch.nn.SiLU())
+        else:
+            layers = []
+            for _ in range(p.depth):
+                layers += [torch.nn.Linear(d_in, p.width), torch.nn.SiLU()]
+                d_in = p.width
         self.trunk = torch.nn.Sequential(*layers)
         self.f_head, self.o_head = torch.nn.Linear(p.width, d_out), torch.nn.Linear(p.width, 1)
 
@@ -218,6 +242,8 @@ def fit(ST, F, p: FieldParams, seed=0, log=None):
     """Train the field on a stack-like dict ST (xyz, offsets, z, pairs, names; stack units) and the features F of
     its points (stack order). Returns a Field."""
     dev = torch_device(p.device)
+    if p.tf32:
+        torch.set_float32_matmul_precision("high")
     xyz = np.asarray(ST["xyz"], dtype=np.float64)
     F = np.asarray(F, dtype=np.float64)
     z = np.asarray(ST["z"], dtype=np.float64)
@@ -244,6 +270,7 @@ def fit(ST, F, p: FieldParams, seed=0, log=None):
     eye = torch.eye(3, device=dev)
     bce = torch.nn.BCEWithLogitsLoss()
     hist = []
+    t0 = time.perf_counter()
     for step in range(p.steps):
         ib = torch.randint(0, len(X), (B,), device=dev, generator=g)
         f_s, _ = net(X[ib])
@@ -280,9 +307,12 @@ def fit(ST, F, p: FieldParams, seed=0, log=None):
         opt.step()
         sched.step()
         if step % max(p.steps // 10, 1) == 0 or step == p.steps - 1:
-            hist.append(dict(step=step, **{k: v.item() for k, v in terms.items()}))
+            hist.append(dict(step=step, **{k: v.item() for k, v in terms.items()},
+                             seconds=time.perf_counter() - t0))
             if log:
-                log(f"    field step {step}: " + ", ".join(f"{k} {v:.4f}" for k, v in hist[-1].items() if k != "step"))
+                log(f"    field step {step}: " + ", ".join(f"{k} {v:.4f}" for k, v in hist[-1].items()
+                                                         if k not in ("step", "seconds"))
+                    + f" ({hist[-1]['seconds']:.0f} s)")
     net.eval()
     meta = dict(centre=centre.tolist(), scale=scale, mu=mu.tolist(), sd=sd, lo=lo.tolist(), hi=hi.tolist(),
                 spot_spacing=h, z=z.tolist(), d_out=d, seed=int(seed), params=dict(p.__dict__), history=hist,
@@ -333,10 +363,12 @@ def get_field(cfg, root, seed, pair_id, embryo, ST, F, variant="full", log=print
     p = FieldParams.from_mapping(cfg.raw["field"])
     if f.exists():
         return Field.load(f, p.device)
-    log(f"  field {embryo} ({variant}, {p.steps} steps, {torch_device(p.device)})")
-    fld = fit(ST, F, p, seed=seed, log=None)
+    log(f"  field {embryo} ({variant}, {p.width}x{p.depth}{' residual' if p.residual else ''}, {p.steps} steps, "
+        f"{torch_device(p.device)})")
+    fld = fit(ST, F, p, seed=seed, log=log if p.steps >= 50000 else None)
     log(f"    losses at the end: " + ", ".join(f"{k} {v:.4f}" for k, v in fld.meta["history"][-1].items()
-                                                if k != "step"))
+                                                if k not in ("step", "seconds"))
+        + f" ({fld.meta['history'][-1]['seconds']:.0f} s)")
     fld.save(f)
     return fld
 

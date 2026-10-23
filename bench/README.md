@@ -51,6 +51,20 @@ python -m mgw.bench report --tier dev
 - `run` never reads the h5ad files, so only `cache/` has to be copied to a GPU machine.
 - MGW and the fields train on CUDA when torch sees a GPU.
 
+## Field size test
+
+`bench/scripts/field_scale.py` trains the fields of one pair at larger sizes (`L`: 512×6 residual, 256 Fourier
+frequencies, 100k steps; `XL`: 1024×8 residual with LayerNorm, 512 frequencies, 200k steps) and scores them: fit R²
+at the spots, and κ_bal of stage 2 with the field's features on the stack points and on the sampled volume.
+
+```bash
+python bench/scripts/field_scale.py train --size L                      # both embryos of X4 (sim14: hours)
+python bench/scripts/field_scale.py score --sizes current,L,XL          # reports/field_scale/X4_seed0.csv
+```
+
+XL runs on LRZ as a job array (`bench/scripts/lrz_field_scale.sbatch`; its header lists the caches to copy).
+`field.tf32=true` speeds up A100 / H100 and enters no hash.
+
 ## Output
 
 The root (`--root`, `$MGW_BENCH_DIR`, or `<MGW data dir>/bench`) holds `cache/`, `results/` and `reports/`.
