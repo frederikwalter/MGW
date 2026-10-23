@@ -40,13 +40,13 @@ stack:                       # stage 1: the stack of an embryo's serial sections
   global_sweeps: 2
   coupling: moscot_icp       # the within-embryo coupling of the volume pipelines: set it to the winner of the S_* tools
 
-field:                       # the field over each stack (V_* pipelines)
-  width: 128
-  depth: 3
+field:                       # the field over each stack (V_* pipelines); width, depth, sigma_xy and steps from the
+  width: 256                 # field grid on X4 (2026-10-23): best held-out R^2 (label-free), fit R^2 0.52 -> 0.60
+  depth: 4
   n_freq: 64
-  sigma_xy: 4.0
+  sigma_xy: 8.0
   sigma_z: 1.0
-  steps: 3000
+  steps: 20000
   batch: 2048
   lr: 2.0e-3
   lambda_depth: 1.0
