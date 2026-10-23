@@ -9,7 +9,8 @@ Hashes name the caches and the result folders, so results of different settings 
 - feature cache:  reduce + features (features.zscore_by only when not "section", so the first caches stay valid)
 - stack cache:    reduce + features + stack + fgw.alpha (the order inference uses the FGW objective); stack.coupling
                   only when it is not "moscot_icp" (the first caches keep their names), plus the mgw block for "mgw_icp"
-- field cache:    the stack's key + field (minus `device`): the trained weights and the sampled volumes
+- field cache:    the stack's key + field (minus `device` and `tf32`; residual / layernorm only when set): the
+                  trained weights and the sampled volumes
 - a pipeline:     reduce + features + fgw + metrics + its spec (+ the stack it uses, + field for the volume strategy on
                   a field, + the mgw / rfgw block for those aligners)
 """
@@ -89,7 +90,7 @@ DEFAULTS = {
         "z_gaps": None,
         "coupling": "moscot_icp",        # the within-embryo coupling the volume pipelines build their stacks with
     },
-    "field": {                           # one field per embryo, pair features and seed; `device` is not hashed
+    "field": {                           # one field per embryo, pair features and seed; `device`, `tf32` not hashed
         "width": 128,
         "depth": 3,
         "n_freq": 64,                    # Fourier frequencies (sin and cos each), Gaussian with the bandwidths below
@@ -103,7 +104,10 @@ DEFAULTS = {
         "lambda_smooth": 1.0e-3,         # ||J_f||_F^2
         "occ_out": 2.0,                  # negatives: farther than this many spot spacings from tissue / every segment
         "occ_jitter": 0.5,               # positives along the segments, jittered in-plane by this many spot spacings
+        "residual": False,               # residual blocks after an input projection (deep nets)
+        "layernorm": False,              # pre-LayerNorm in the residual blocks
         "device": "auto",                # auto | cpu | cuda
+        "tf32": False,                   # TF32 matmuls on A100 / H100
     },
     "mgw": {                             # MGW's phi (2D) and its geodesics (2D and 3D); defaults of mgw.mgw_align
         "widths": [128, 256, 256, 128],
@@ -242,7 +246,13 @@ class Config:
         return short_hash(self.stack_key(coupling))
 
     def field_key(self):
-        return dict(**self.stack_key(), field={k: v for k, v in self.raw["field"].items() if k != "device"})
+        """The stack's key and the field settings, without the hardware ones (device, tf32); residual and layernorm
+        only when set, so the first field caches keep their names."""
+        f = {k: v for k, v in self.raw["field"].items() if k not in ("device", "tf32")}
+        for k in ("residual", "layernorm"):
+            if not f[k]:
+                del f[k]
+        return dict(**self.stack_key(), field=f)
 
     def field_hash(self):
         return short_hash(self.field_key())

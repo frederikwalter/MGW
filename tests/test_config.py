@@ -60,3 +60,22 @@ def test_series_tiers_and_directions():
     assert x4.direction_label("a_stack") == "human_stack"
     q, t = x4.sides("a_stack")
     assert q.dataset == "MOSTA" and t.dataset == "HESTA"     # human stack: mouse queries
+
+
+def test_field_hash_keeps_the_cached_fields():
+    a = config.load("bench.yaml")
+    assert a.field_hash() == "5318e0cf"                      # the fields of the X4 grid winner
+    assert config.load("bench.yaml", ["field.tf32=true", "field.device=cpu"]).field_hash() == a.field_hash()
+    r = config.load("bench.yaml", ["field.residual=true"])
+    assert r.field_hash() != a.field_hash() and r.pipeline_hash("V_fgw") != a.pipeline_hash("V_fgw")
+    assert r.pipeline_hash("PC_fgw") == a.pipeline_hash("PC_fgw")
+
+
+def test_residual_field_net_shapes():
+    import torch
+    from mgw.bench import field
+    for kw in (dict(), dict(residual=True), dict(residual=True, layernorm=True)):
+        p = field.FieldParams(width=32, depth=3, n_freq=8, **kw)
+        net = field.FieldNet(5, p, seed=0)
+        f, o = net(torch.zeros(7, 3))
+        assert f.shape == (7, 5) and o.shape == (7,) and net.feat(torch.zeros(7, 3)).shape == (7, 5)
