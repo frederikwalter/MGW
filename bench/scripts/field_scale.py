@@ -33,6 +33,9 @@ SIZES = {
     "current": [],
     "L": ["field.width=512", "field.depth=6", "field.n_freq=256", "field.residual=true", "field.steps=100000",
           "field.batch=8192", "field.lr=1.0e-3"],
+    # L without the smoothness penalty and with a 10x weaker depth loss: do the regularizers cap the fit?
+    "L_noreg": ["field.width=512", "field.depth=6", "field.n_freq=256", "field.residual=true", "field.steps=100000",
+                "field.batch=8192", "field.lr=1.0e-3", "field.lambda_smooth=0", "field.lambda_depth=0.1"],
     "XL": ["field.width=1024", "field.depth=8", "field.n_freq=512", "field.residual=true", "field.layernorm=true",
            "field.steps=200000", "field.batch=16384", "field.lr=5.0e-4"],
 }
