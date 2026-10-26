@@ -236,25 +236,17 @@ The volume pipeline chooses only τ, ε and the z-stretch s; A also picks a targ
 
 Before any cross-species run, the field is tested within one species, which isolates the representation from the species mismatch. Selection uses label-free scores only; label agreement is reported.
 
-**G2. Odd/even split.**
-- Split one stack into its odd and its even sections, and fit a field and a volume to each half.
-- Align the two volumes with stage 2. The true map is the identity in 3D.
-- **Scores (label-free):**
-  - median 3D error of the barycentric map, in units of the mean section spacing;
-  - median z error;
-  - *plane locking:* the share of mapped z within ±10 % of a spacing of the other half's sections, against the 20 % expected without locking.
-- **Two variants:**
-  - *common z:* both halves keep the z of the full stack, which tests the representation alone;
-  - *re-estimated z:* each half re-estimates its gaps, which are twice as large and saturate more. This tests the gap estimates too.
-- Run the point-cloud ablation alongside. G2 shows directly whether raw stacks lock onto their planes and whether the field fixes that.
-- **Pass:** the median 3D error is below half a section spacing, there is no plane locking (share ≤ 1.5 × chance), and the field does better than the point cloud.
-- Embryos with ≥ 6 sections: CS12-13_E2 (8), CS14-15_E2 (10), CS17_E1 (10), CS18_E1 (6), CS23_E2 (8; S2 and S4 excluded, no raw counts). Mouse stacks in the series have ≤ 5 sections (a 3/2 split). E16.5_E2 (13) is the only long mouse stack.
+**G1. Held-out section.** For every interior section k, build the stack and field without k, and predict k at its own spots.
+- **Compared with:** McCann interpolation between k − 1 and k + 1; copying the nearer neighbour; copying it through the coupling.
+- **Selection score:** held-out-gene r at k's spots. Feature error and label agreement are reported.
+- **Pass:** beats the nearer-neighbour copy by more than the seed noise, and is no worse than McCann.
+- G1 also picks the z-scoring (section or embryo) and the field's hyperparameters.
 
 **G2. Odd/even split.** Fit a field and a volume to the odd and to the even sections of one stack, and align them with stage 2. The true map is the identity.
 - **Scores:** median 3D and z error of the barycentric map, in section spacings; *plane locking*, the share of mapped z within ±10 % of a spacing of the other half's sections (≈ 20 % by chance).
 - **Variants:** *common z* (both halves keep the full stack's z: the representation alone) and *re-estimated z* (each half estimates its own, larger gaps).
 - **Pass:** median 3D error < 0.5 spacings, locking ≤ 1.5 × chance, and better than the point-cloud ablation.
-- Long stacks: CS12-13_E2 (8), CS14-15_E2 (10), CS17_E1 (10), CS18_E1 (6), CS23_E2 (10), and E16.5_E2 (13), the only long mouse stack. The other mouse stacks have ≤ 5 sections.
+- Long stacks: CS12-13_E2 (8), CS14-15_E2 (10), CS17_E1 (10), CS18_E1 (6), CS23_E2 (8; S2 and S4 excluded, no raw counts), and E16.5_E2 (13), the only long mouse stack. The other mouse stacks have ≤ 5 sections.
 
 **G3. Stack building.** Stage 1 is scored on W, G1 and G2. This is where the registration methods of §1b and §5a compete.
 
