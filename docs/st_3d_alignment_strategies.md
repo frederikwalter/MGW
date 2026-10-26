@@ -2,61 +2,46 @@
 
 Discussion notes. The goal is a spot-level coupling between human (HESTA) and mouse (MOSTA) embryos that is good enough to serve as a benchmark in a methods paper. The only ground truth we trust is the organ labels. The notes build on [`demos/human_mouse_align_3d.ipynb`](../demos/human_mouse_align_3d.ipynb), [`mgw/stack3d.py`](../mgw/stack3d.py) and the benchmark harness in [`mgw/bench`](../mgw/bench) ([`bench/README.md`](../bench/README.md)).
 
-**The approach in one paragraph.** Each embryo is treated as a continuous volume, not as a pile of 2D sections:
-1. **Stage 1, within species.** The serial sections are registered into a stack. A neural field is then fitted over the stack: features and tissue occupancy at every point in 3D. Points are sampled evenly through the volume, and the field gives their features.
-2. **Stage 2, across species.** The two sampled volumes are aligned 3D ↔ 3D.
-3. **Evaluation.** The coupling is carried back to the real spots and scored against the organ labels. It is compared with the best 2D ↔ 2D alignment of real sections.
-
-The notes run in this order:
-- §0 states the problem and the facts that shape the approach;
-- §1 describes the approach stage by stage;
-- §2 defines success;
-- §3 sets the within-species gates that the field must pass first;
-- §4 chooses a representative series of pairs;
-- §5 assigns alignment methods to the two stages;
-- §6 proposes an order of experiments;
-- §7 lists open questions.
+**The approach.** Each embryo is treated as a continuous volume, not as a pile of 2D sections:
+1. **Stage 1, within species.** Register the serial sections into a stack. Fit a neural field over the stack (features and tissue occupancy at every 3D point), and sample points evenly through the volume.
+2. **Stage 2, across species.** Align the two sampled volumes 3D ↔ 3D.
+3. **Evaluation.** Carry the coupling back to the real spots, score it against the organ labels, and compare it with the best 2D ↔ 2D alignment of real sections.
 
 **Decisions so far:**
-- **The representation is a volume.** It is modelled as a field and computed on as sampled points (§1a).
+- **The representation is a volume:** a field for the model, sampled points for the computation (§1a).
 - **Stage mismatch is handled by choosing pairs** (§4). Interpolating between stages comes later.
-- **No supervision beyond the evaluation labels.** Fields, methods and parameters are chosen without labels, landmarks or organ matches. The within-species gates (§3) select on label-free scores.
+- **No supervision beyond the evaluation labels.** Fields, methods and parameters are chosen by label-free scores.
 - **Results are symmetric.** Every pipeline runs in both directions, and every score averages the two.
-- **The 2D ↔ 2D alignment is the reference.** Strategy A (each query section against the best real target section, chosen by the FGW objective) is what the volumes must beat (§2a).
-- **External tools are adapted only if they earn it** (§5c).
+- **The reference is 2D ↔ 2D.** Strategy A aligns each query section with the best real target section, chosen by the FGW objective. The volumes must beat it (§2a).
 - **One headline metric,** organ-balanced Cohen's κ, ranks pipelines (§2a).
+- **External tools are adapted only if they earn it** (§5c).
 
 ---
 
 ## 0. The problem and where we stand
 
-**Inputs.** Each embryo has 3–13 sagittal sections at unknown spacing. Both full databases are available.
-
-**Output.** A coupling P between the spots of the two embryos. Where one embryo sits inside the other is a means to that end, not the goal.
+**Input:** 3–13 sagittal sections per embryo, at unknown spacing. **Output:** a coupling P between the spots of two embryos.
 
 **Why it is hard:**
-1. *Depth.* Two sections are cut at different mediolateral positions. In 2D, the difference shows up as a deformation.
-2. *A coarse stack.* There are only a few sections, with gaps estimated from the in-plane variogram. Of those gap estimates, 3 of 5 in CS18_E1 and 2 of 4 in E12.5_E1 are saturated, so they are only lower bounds.
-3. *Species mismatch.* Proportions, size and developmental timing differ. The stage correspondences are windows, not matched stages. The label sets are only harmonised, not identical.
-4. *Unsupervised selection.* Methods and parameters must be picked by an objective. The labels only score the result.
+- *Depth.* Two sections are cut at different mediolateral positions, which looks like a deformation in 2D.
+- *A coarse stack.* There are few sections, and many gap estimates are only lower bounds (3 of 5 in CS18_E1, 2 of 4 in E12.5_E1).
+- *Species mismatch.* Size, proportions and timing differ; the label sets are only harmonised.
+- *Unsupervised selection.* Choices are made by an objective; the labels only score the result.
 
-**Facts from the 3D notebook runs that shape the approach:**
-- **Nothing lies between the sections except a prior.** In a leave-one-out test, interpolating a held-out section from its two neighbours along their coupling (McCann displacement interpolation) beat copying the nearer neighbour by only +0.00 to +0.04 in label agreement. A field cannot add information between the sections either. It can only be a better prior, so it has to prove that on held-out sections (§3, G1).
-- **The objective and the labels can disagree.** Searching harder over an objective that ranks candidates differently from the labels made things worse: a lower FGW objective (0.172 vs 0.179) came with a worse label accuracy (0.53 vs 0.69). Every unsupervised choice therefore gets a regret guardrail (§2e).
-- **z is the least reliable axis.** The gaps are lower bounds, and a field inherits any spacing error. Euclidean distances are not invariant to stretching one axis, so the z-scale is an explicit parameter (§1e).
+**Lessons from the 3D notebook:**
+- **Between sections there is only a prior.** Interpolating a held-out section from its neighbours (McCann) beat copying the nearer neighbour by just +0.00 to +0.04 in label agreement. The field must prove it is a better prior (§3, G1).
+- **The objective and the labels can disagree.** A lower FGW objective (0.172 vs 0.179) came with worse label accuracy (0.53 vs 0.69). Every unsupervised choice gets a regret check (§2e).
+- **z is the least reliable axis,** and the z-scale is an explicit parameter (§1e).
 
-**Status.** Step 1 of §6, the harness, is implemented in `mgw.bench`: metrics, series, the 2D reference A with its nulls and ceilings, and the report and viewer. The step-1 revision changed it as follows:
-- K now counts the organs of the whole target embryo (§2a);
-- fold-overs work for 3D targets;
-- genes can be z-scored per embryo instead of per section (§1c);
-- the pipelines of earlier strategies are gone.
+**Status (2026-10-26).** The harness has been cut down to two questions, one metric (κ_bal) and one label-transfer figure ([`bench/README.md`](../bench/README.md)):
+1. Which tool aligns real sections best in 2D?
+2. Which tools are best for the within-embryo and the between-embryo coupling in 3D, and by how much does 3D beat 2D?
 
-Steps 2 and 3 are implemented as code, with results pending:
-- the field (`mgw/bench/field.py`);
-- the gates G1 and G2 (`mgw/bench/gates.py`, `bench/configs/gates.yaml`, `python -m mgw.bench gates g1|g2`);
-- the volume pipelines V_fgw, V_linear, V_gw and PC_fgw (`mgw/bench/pipelines/volume.py`, `bench/configs/step3.yaml`).
+The gates, nulls, ceilings, guardrails and the synthetic pair are gone from the code, so §2b–§2g and §3 describe plans, not code. The first real results are on X4, seed 0 (§7).
+- The stack points beat 2D clearly (κ_bal 0.439 against 0.303).
+- The field volumes only beat 2D once the field's smoothness penalty and depth loss are relaxed (0.317).
 
-They are tested on a synthetic embryo pair only (`mgw/bench/synthetic.py`). No HESTA/MOSTA result exists yet. The choices made where these notes leave room are listed in §6a.
+Implementation choices are in §6a.
 
 ---
 
@@ -64,224 +49,192 @@ They are tested on a synthetic embryo pair only (`mgw/bench/synthetic.py`). No H
 
 ### 1a. Representation: a field for the model, points for the computation
 
-GW sees a 3D representation in only two ways:
-1. **The measure:** where the mass sits. In a raw stack, all mass sits on a few planes, at depths that differ between the two embryos.
-2. **The path domain:** which routes geodesic distances can take. In a stack, they can only cross between sections along a few edges.
+A raw stack puts all mass on a few planes, and its geodesics can cross between sections along only a few edges. A volume fixes both:
+- **The model is a field** over all of 3D. It can be evaluated anywhere and differentiated, which MGW needs (§1e).
+- **The computation stays on points,** because OT and GW couple measures. Points are sampled evenly through the field's volume, with equal masses and the same number for both species.
 
-A volume fixes both, but only on the computational side:
-- **The model is a field:** expression and occupancy over all of 3D. It can be evaluated anywhere, at any density, and it can be differentiated, which MGW needs (§1e).
-- **The computation stays on points.** OT and GW couple measures. So points are sampled evenly through the field's volume, with equal masses, and both species get the same number of points.
-
-The field does not know more than the sections. Between them it is a smoothness prior, which suits a large organ that changes smoothly (the liver), and organs smaller than a gap stay invisible to any representation. That is why the field must beat the simple priors on held-out sections before it is used (§3).
+The field knows nothing beyond the sections. Between them it is a smoothness prior, so it must beat simple priors on held-out sections before it is used (§3).
 
 ### 1b. Stage 1: the stack (within species)
 
-This is the existing stack building (`mgw.bench.stack`, cached by `pipelines/stacked.get_stack`):
-1. **Order:** the file order for HESTA. For MOSTA, the order is inferred from the FGW objective between all pairs of sections.
-2. **Registration:** FGW between neighbouring sections (moscot), refined by OT-ICP (rotation or reflection), composed into the frame of the middle section and refitted in global sweeps.
-3. **z:** the gaps from the in-plane variogram.
-4. **Couplings:** the coupling between each pair of neighbouring sections, kept as displacement pairs: the peak of each row and column, weighted by mass.
+Built by `mgw.bench.stack` and cached by `pipelines/stacked.get_stack`. Each step and its method:
 
-The couplings are *not* thrown away. They are the only data on how tissue continues from one section to the next, and the field uses them twice (§1c). Other registration methods can replace step 2 (§5a).
+| Step | Method now | Could replace it later |
+| --- | --- | --- |
+| 1. Section order | File order (HESTA); inferred from FGW objectives (MOSTA) | Metadata or the laterality score L |
+| 2a. Coupling of neighbours | FGW (moscot, spatial weight 0.8) | PASTE2 (partial FGW), MGW |
+| 2b. Placement of each section | OT-ICP: rigid, i.e. rotation or reflection plus translation | Affine or non-rigid: Spateo, MOSAICField, STalign (§5a) |
+| 2c. Common frame | Compose into the middle section's frame, then 2 global sweeps | — |
+| 3. z | Gaps from the in-plane variogram | \|ΔL\|, metadata, a z-stretch fitted in stage 2 (§1e) |
+| 4. Couplings kept | OT-ICP's final coupling, as displacement pairs (the peak of each row and column) | Whatever 2a/2b produce |
+
+Every alternative is scored on G3 (§3). All steps use a within-species embedding of the embryo's own genes, not the cross-species embedding of §1c.
+
+**Inferring the order (step 1).** MOSTA files do not record the order of the sections. For every pair of sections (400 points each), solve FGW and evaluate its objective. A low objective means two sections look alike, so it serves as a dissimilarity. Neighbouring sections should be the most alike, so the order is the shortest path that visits every section once. It is solved exactly (Held–Karp, `stack3d.infer_order`) and oriented to agree with the file order.
+
+**OT-ICP (step 2b).** ICP (iterative closest point) aligns two point clouds by repeating two steps: match each point to its closest partner, then fit the best rigid transform to the matches. OT-ICP replaces the closest-point matching with an OT coupling. Starting from the FGW coupling, it alternates:
+1. a weighted Procrustes fit: the rotation (or reflection) and translation that best fit the current coupling;
+2. a new linear OT, with cost λ·‖x_a − (x_b R + t)‖² + (1 − λ)·‖f_a − f_b‖² (λ = 0.5, each term median-scaled).
+
+It runs once as a rotation and once as a reflection, and keeps the lower cost (to catch a section mounted face down). Once the sections overlap, a point can only pair with nearby points of similar expression.
+
+**Why not FGW alone?** FGW returns a coupling but no transform. Its GW term only compares distances within each section, so it cannot see rotations or reflections. Without OT-ICP:
+- each section would still need a transform, at best one Procrustes fit on the FGW coupling (OT-ICP stopped after its first step);
+- that coupling is entropic and blurry, and on a nearly symmetric section it can mix the true match with its mirror image, which pulls the fit towards an average;
+- nothing would decide between rotation and reflection (the harness already logs FGW's implied orientation, `fgw_det`, next to OT-ICP's choice);
+- the kept couplings would be non-local. Displacement pairs would then join distant points, and the field's depth loss (§1c) would learn a wrong derivative along z.
+
+**Tested on X4 (§7b):** without OT-ICP (`stack.coupling: moscot_procrustes`: one weighted Procrustes fit on moscot's coupling), the neighbour couplings score lower on 17 of 18 neighbour pairs. Mean κ_bal drops from 0.581 to 0.530.
+
+**Can MGW be used here?** Yes, as the coupling of step 2a: MGW aligns 2D sections and returns a coupling, which would start OT-ICP in place of moscot's. It still needs step 2b, because MGW gives no transform either. It is a low-priority candidate:
+- neighbouring sections of one embryo share shape and size, which is where Euclidean FGW already works; MGW's learned metric is meant for differences in proportions;
+- it trains one network per section (20k iterations, 3 restarts by default), for every neighbouring pair.
+
+It could pay off where sections are torn or folded, since geodesics follow the tissue.
+
+**Tested on X4 (§7b):** MGW + OT-ICP (`mgw_icp`) gives the same couplings as moscot + OT-ICP, equal to within 1e-4 per neighbour pair. OT-ICP converges to the same fixed point from either start. MGW costs about 45 min per embryo instead of seconds, so moscot stays.
 
 ### 1c. Stage 1: the field
 
-One field per embryo and seed, in the stack's frame:
+One field per embryo, pair and seed, in the stack's frame:
 
 $$x = (x, y, z) \;\mapsto\; \big(f(x),\, o(x)\big)$$
 
-- f is the shared ortholog embedding: the same features that the cross cost uses.
+- f is the pair's shared ortholog embedding, the features that the cross cost uses.
 - o is the tissue occupancy, in [0, 1].
 
-**Training data: the real spots only.** Training never uses interpolated points as targets, or the field would just learn the McCann interpolant back. It never uses the held-out genes, and never the labels.
+**The shared embedding** (`orthologs.shared_embedding`, via `prepare.pair_features`). It is computed once per pair and seed, over all spots of both embryos:
+1. map genes through the 1:1 ortholog table;
+2. keep the union of the 2000 most variable orthologs of each embryo, minus the 500 held-out evaluation genes;
+3. z-score every gene within each section (or each embryo, see below);
+4. run one joint PCA on the stacked spots of both embryos, keeping 30 components.
+
+Both species therefore share one coordinate system. The cross cost is the Euclidean distance in this space, divided by its 0.99 quantile.
+
+**Training uses the real spots only.** Interpolated points are never feature targets, or the field would learn the McCann interpolant back. Held-out genes and labels are never used either.
 
 **Losses:**
-1. **Features at the spots:** ‖f(x_i) − e_i‖² over minibatches of real spots.
-2. **Depth from the couplings.** For a displacement pair (i in section k, j in k + 1) and a point x(t) = (1 − t)x_i + t x_j on its segment, the derivative of f along the segment must match the finite difference:
+1. **Features:** ‖f(x_i) − e_i‖² at the real spots.
+2. **Depth.** For a displacement pair (i in section k, j in k + 1) and a point x(t) on the segment between them, the derivative of f along the segment must match the finite difference:
 
    $$\|J_f(x(t))\,(x_j - x_i) - (e_j - e_i)\|^2$$
 
-   This is the only depth information the data hold. Without it, the z-part of f is unconstrained: spectral bias makes f nearly flat in z, so the depth collapses, while high-frequency encodings let it oscillate.
-3. **Occupancy.**
-   - *Positives:* the real spots, and points near the segments of the displacement pairs. The couplings carry each section's outline across the gap.
-   - *Negatives:* in-plane points outside each section's tissue, and gap points far from every segment.
-4. **Smoothness:** a penalty on ‖J_f‖, with a lower Fourier-feature bandwidth in z than in-plane, because the data are much coarser along z.
+   This is the only depth information in the data. Without it, f would be either flat or oscillating along z.
+3. **Occupancy.** Positives are the spots and points near the segments, so each section's outline carries across the gap. Negatives are in-plane points outside the tissue and gap points far from every segment.
+4. **Smoothness:** a penalty on ‖J_f‖, with a lower Fourier bandwidth in z than in-plane.
 
-**The domain is clipped to [z_first, z_last].** Beyond the outermost sections there are no data, so there is no volume. The two species then cover different depth ranges, which stage 2 must allow (§1e).
+**The losses set how well f fits the spots (§7c).** With smoothness and the full depth loss, f explains only 50–70 % of the feature variance at its own training spots, whatever the size of the net (up to 512×6). Dropping the smoothness penalty and weakening the depth loss tenfold raises this to 86–93 %. The field then violates the depth constraint more, and whether it still predicts missing sections is untested.
 
-**Feature z-scoring.** The harness z-scores every gene within each section. That removes offsets between sections, including the real ones: a gene that rises towards lateral sections becomes flat across the stack, and the field loses that depth signal. `features.zscore_by: embryo` keeps the offsets. Section effects of the technology are the risk. G1 decides between the two (§3), and the 2D reference A runs on the same features as the volume, so that Δκ compares representations, not features.
+**The domain is clipped to [z_first, z_last].** There are no data beyond the outermost sections. The two species then cover different depth ranges, which stage 2 must allow (§1e).
+
+**Per-section or per-embryo z-scoring.** Z-scoring per section removes batch effects between sections, but also real depth trends: a gene that rises towards lateral sections becomes flat. Z-scoring per embryo (`features.zscore_by: embryo`) keeps those trends, and the batch effects with them. G1 picks one (§3). A uses the same features, so that Δκ compares representations, not features.
 
 ### 1d. Stage 1: sampling the volume
 
-- **Points:** quasi-uniform points (Sobol, or Poisson-disk) in the clipped box, kept where o(x) > 0.5, until N points.
-  - N is the same for both embryos of a pair.
-  - Sampling is roughly as dense in z as in-plane, so a plain 3D kNN graph has diagonal edges (§1e).
-- **Masses:** equal, so the measure approximates a uniform distribution over the tissue volume.
-- **Features:** f at each point.
-- **Points per embryo:** a first guess is N ≈ `MAX_OBS` to 2 × `MAX_OBS`, about 5–10k. One dense GW solve per pair is then the size of one large 2D solve.
+- **Points:** quasi-uniform (Sobol) in the clipped box, kept where o(x) > 0.5, until N points. The density is the same along z as in-plane.
+- **N:** the same for both embryos of a pair; a first guess is 5–10k (1–2 × `MAX_OBS`), so one solve costs about one large 2D solve.
+- **Masses** are equal, and the **features** are f at each point.
 
 ### 1e. Stage 2: aligning the volumes (across species)
 
-Stage 2 is one 3D ↔ 3D solve per pair, between the two sampled volumes, with the cross cost from the field features (scaled once per pair, as in the harness).
-- **Unbalanced on both sides,** with the same τ. Depth ranges overlap only partly in most pairs (§4), and a balanced coupling would squeeze one embryo's range onto the other's.
-  - Example: in X4 the mouse stack has no sections between L 0.12 and 0.75, which is exactly where the human stack lies. The mouse volume there is mostly prior.
-  - With the same τ on both sides, the solve is symmetric: P and its transpose serve both directions, as in A.
-- **The z-scale.** Distances are max-normalised, so the overall size does not matter, but the ratio between z and in-plane does. The first runs use the variogram z. A scan over a z-stretch s of one side, chosen by the objective, is the planned extension. It needs its own regret check (§2e).
-- **The aligner ladder.** Each step changes one thing (§5b):
-  - FGW on Euclidean distances;
-  - Riemannian FGW on shortest paths in a 3D kNN graph of the samples (no `stack_graph` needed, since the samples are dense in z);
-  - MGW with the pull-back metric of the field f itself. The field already is the φ that MGW would otherwise train.
+One 3D ↔ 3D solve per pair, with the cross cost from the field features:
+- **Unbalanced on both sides, with the same τ.** Depth ranges overlap only partly in most pairs (§4), and a balanced coupling would squeeze one range onto the other. Equal τ keeps the solve symmetric, so P and Pᵀ serve both directions. Example: in X4 the mouse stack has no sections between L 0.12 and 0.75, exactly where the human stack lies.
+- **The z-scale.** Distances are max-normalised, so size does not matter, but the ratio of z to in-plane does. The first runs use the variogram z. A scan over a z-stretch s of one side, chosen by the objective, comes later, with its own regret check (§2e).
+- **The aligner ladder** (§5b): FGW on Euclidean distances; Riemannian FGW on shortest paths in a 3D kNN graph; MGW with the pull-back metric of f. The field already is the φ that MGW would otherwise train. On X4 the three score the same on the field volume (0.288–0.290, §7d): the representation limits them, not the aligner.
+- **The unbalanced solve.** In every 3D run so far, OTT's unbalanced correction returned NaN, and the solve was retried without it. That retry rejects 46–63 % of the mass of each side, far more than τ = 0.95 implies. This is unresolved.
 
-**Ablation without a field (point cloud).** The same stage 2 is run on the raw stack points instead of the samples:
-- each section's points get masses proportional to the thickness of its slab (half the gap to each neighbour);
-- the features are the real ones.
-
-This isolates what the field adds over simply weighting the real points by volume.
+**Point-cloud ablation.** The same stage 2 on the raw stack points, with real features and masses proportional to each section's slab (half the gap to each neighbour). It isolates what the field adds over weighting the real points by volume.
 
 ### 1f. Back to the real spots
 
-Labels exist only on the real spots, so every score is computed there:
-- **Query side.** Every real spot of a query section spreads over its k nearest samples in its own embryo's volume, with Gaussian weights at the sample spacing (rows sum to 1). This gives A_q.
-- **Target side.** Every target sample takes the bins of its k nearest real target spots. This gives B_t: the samples' organ composition B_t T and held-out genes B_t Y.
-- **The coupling scored** for a query section is A_q P_vol, against the target samples. It is scored exactly like a 2D coupling (`Task.score` with 3D target coordinates), one row per (direction, query section). The rows therefore compare one-to-one with A's.
+Labels exist only on the real spots, so scoring happens there:
+- **Query side (A_q):** each real query spot spreads over its k nearest samples in its own volume.
+- **Target side (B_t):** each target sample takes the organ composition and held-out genes of its k nearest real target spots.
+- **Score** A_q P_vol exactly like a 2D coupling (`Task.score` with 3D target coordinates), one row per (direction, query section), so the rows compare one-to-one with A's.
 
-A target sample in a gap takes the labels of the nearest real spots. This is the nearest-section copy, used for *evaluation* only. The field never sees labels.
+A target sample in a gap takes the labels of the nearest real spots. This is used for evaluation only; the field never sees labels.
 
 ---
 
 ## 2. Success metrics
 
-Four principles:
 - Selection never sees labels.
-- Every score is symmetric: the mean of the two directions.
-- Every score is reported between a floor (a null or simple baseline) and a ceiling (same species, §2f).
-- Scores are reported per query section, per embryo pair, and pooled over the series.
+- Every score is the mean of the two directions.
+- Every score is reported between a floor (§2g) and a same-species ceiling (§2f), per query section, per pair, and pooled.
 
 ### 2a. The headline metric: organ-balanced Cohen's κ
 
 **In one sentence:** *averaged over organs, how far the alignment moves from chance (0) towards sending every organ's tissue to the same organ in the other embryo (1).*
 
-**The agreement table.** For one query section and its target (a real target section in A, the target volume in the volume pipelines):
-- C_ab is the mass of P that goes from query organ a to target organ b.
-- It is computed at full resolution: every bin carries the row of P of its point.
-- C is a "soft" confusion matrix. Arg-max label transfer would turn it into the usual hard one.
+**The agreement table C.** C_ab is the mass of P that goes from query organ a to target organ b, at full resolution. It is a soft confusion matrix.
 
-**Three numbers come out of C:**
-1. **Organ match score (OMS),** the raw number. Each organ o present on both sides gets $m_o = C_{oo} / \sum_b C_{ob}$, the share of its mass that lands on the same organ. OMS is the mean of $m_o$ over the K shared organs.
-2. **Organ-balanced κ, the headline:**
-   - Rescale every row of C so that each query organ has the same total mass, then apply Cohen's formula.
-   - With C restricted to the K shared organs, observed agreement then equals OMS, and chance agreement equals exactly 1/K. Hence $\kappa_{bal} = (\mathrm{OMS} - 1/K)\,/\,(1 - 1/K)$.
-   - It is the soft version of chance-adjusted balanced accuracy (`balanced_accuracy_score(adjusted=True)` in scikit-learn). For two organs it is Youden's J.
-3. **Standard Cohen's κ** on the unscaled C. It is reported for readers who expect it, but not used for ranking.
+**Three numbers from C:**
+1. **Organ match score (OMS):** the mean over the K shared organs of $m_o = C_{oo} / \sum_b C_{ob}$, the share of an organ's mass that lands on the same organ.
+2. **Organ-balanced κ (headline):** $\kappa_{bal} = (\mathrm{OMS} - 1/K)\,/\,(1 - 1/K)$. This is Cohen's κ after giving every query organ equal mass, i.e. the soft version of chance-adjusted balanced accuracy.
+3. **Standard Cohen's κ** on the unscaled C: reported, not ranked.
 
-**Which organs count (K).** These are the organs of the query section present anywhere in the *target embryo* (`metrics.presence: embryo`), whatever the target is.
-- A 2D target section that lacks an organ therefore scores it 0 for that query, instead of dropping it from K.
-- Without this rule, A could score higher just by choosing sections that leave hard organs out, and A and the volumes would be scored on different K.
+**Which organs count (K):** the organs of the query section present anywhere in the *target embryo* (`metrics.presence: embryo`). A 2D target section that lacks an organ scores 0 on it. Otherwise A could score higher by picking sections that leave hard organs out.
 
-**Per embryo pair:** the mean over all query sections and both directions.
+**Why this metric:** 0 is chance and 1 is perfect for any K; every organ counts equally (standard κ is dominated by large organs); there is no arg-max, so a blurred coupling loses score; and every pipeline outputs a P on real query spots.
 
-**Why this metric:**
-- **Easy to read.** 0 is chance and 1 is perfect, whatever the pair and whatever K.
-- **Balanced.** Every organ counts equally. Standard κ is dominated by large organs, and it drops when one class dominates even when agreement is high (the "kappa paradox").
-- **No arg-max.** A blurred coupling loses score even when its peak happens to be right.
-- **Symmetric,** and computable for every pipeline, because all of them output a P on real query spots.
+**How it ranks pipelines,** paired against the reference (A with FGW, on the same features):
+- **Δκ:** the candidate's κ_bal minus the reference's, per pair; summarised as the median over X1–X5.
+- **Wins:** pairs where Δκ exceeds the noise margin (2 × the SD of κ_bal over seeds on Dev).
 
-The Landis–Koch bands are a convention, not a calibration. The yardstick is the same-species ceiling (2f).
+**A candidate advances** when its median Δκ > 0, it wins on ≥ 3 of 5 pairs, and it passes the guardrails:
+- *selection works:* regret ≤ 0.05 for every choice made by an objective (§2e);
+- *a plausible map:* ≤ 5 % fold-overs (points whose surface normal flips against the mean);
+- *the negative control X6* (no depth overlap): human queries land at the lateral end of the mouse embryo, mouse queries at the medial end of the human embryo.
 
-**How it ranks pipelines.** The comparison is paired, against the reference pipeline: A with FGW, on the same features.
-1. **Δκ:** a candidate's κ_bal minus the reference's on each pair. The summary is the median over the Screen pairs X1–X5.
-2. **Wins:** the number of pairs on which Δκ exceeds the noise margin, 2 × the SD of κ_bal over seeds on the Dev tier.
+For the paper, report the ceiling share κ_bal / κ_bal(ceiling) next to Δκ.
 
-**A candidate advances** when:
-- its median Δκ is > 0;
-- it wins on ≥ 3 of the 5 pairs;
-- it passes the guardrails.
+### 2b. Supporting metrics (need labels)
 
-**Guardrails (pass or fail, not ranked):**
-- *Selection works:* regret ≤ 0.05 in κ_bal over every choice made by an objective (2e).
-- *A plausible map:* ≤ 5 % fold-overs. A query section's image in the target volume is a surface, and a point folds over when its normal flips against the mean normal.
-- *The negative control stays honest* (X6, whose depth ranges do not overlap):
-  - the mass of each query section must land in the matching end of the other embryo's depth range, measured as the mass-weighted L of the target spots it reaches;
-  - human queries must land at the lateral end of the mouse embryo, and mouse queries at the medial end of the human embryo.
-
-**For the paper,** the ceiling share κ_bal / κ_bal(ceiling) is reported next to Δκ.
-
-### 2b. Supporting metrics: correspondence (need labels)
-
-| Metric | What it measures | Exists |
+| Metric | Measures | Column |
 | --- | --- | --- |
-| Label transfer accuracy and balanced accuracy, at reduced points and at full resolution | Spot-level correspondence | `metrics.label_scores` (`acc_hard`, `bal_acc_hard`) |
-| Per-organ recall $m_o$ | *Which* organs fail, e.g. small or species-specific ones | `recall` column |
-| Organ × organ matrix C | Coarse correspondence; the basis of κ_bal | stored per candidate |
-| Organ coverage: share of query organs whose counterpart receives ≥ 10 % of their mass | Whether whole organs go missing | `coverage` |
-| Boundary-tolerant accuracy: correct if the label occurs within radius r of the target point | Boundaries that sit in slightly different places across species | new |
-| Held-out ortholog co-expression r, against the shuffled baseline | Expression agreement on genes outside the embedding | `coexpr_r`, `coexpr_r0` |
+| Label transfer accuracy and balanced accuracy | Spot-level correspondence | `acc_hard`, `bal_acc_hard` |
+| Per-organ recall m_o | Which organs fail | `recall` |
+| Organ coverage (≥ 10 % of mass reaches the counterpart) | Whether whole organs go missing | `coverage` |
+| Boundary-tolerant accuracy (label within radius r) | Organ boundaries that shift across species | new |
+| Held-out ortholog co-expression r, vs a shuffled baseline | Expression agreement outside the embedding | `coexpr_r`, `coexpr_r0` |
 
 ### 2c. Plausibility of the map (label-free)
 
-- **Smoothness:** fold-overs and the condition number of the local Jacobian (2D or 3D targets), and the share of each spot's k nearest neighbours that stay neighbours after mapping.
-- **GW distortion** of P_vol, reported on its own.
-- **Sharpness:** the effective number of partners per spot, exp(entropy of the row of P).
-- **Rejected mass** of the unbalanced solve: how much is left unmatched, and where in depth. In X4 it should sit in the depth ranges that the other embryo lacks.
+- **Smoothness:** fold-overs, local Jacobian condition number, kNN preservation.
+- **GW distortion** of P_vol.
+- **Sharpness:** effective number of partners per spot, exp(row entropy).
+- **Rejected mass** of the unbalanced solve, and where in depth. In X4 it should sit where the other embryo has no sections.
 
 ### 2d. Consistency (label-free)
 
-- **Parallel sections.** A query embryo's sections were cut in parallel, so their images in the target volume should share one normal, keep their order (|ρ| against the query's own z) and keep their spacing up to one scale.
-  - Unlike a per-section placement, the volume pipeline gets this almost by construction, since the query's sections are part of its own volume. The check catches a stage 2 that bends the volume.
-- **Direction symmetry:** with equal τ on both sides, P(H→M) = P(M→H)ᵀ by construction. Report it whenever τ differs.
-- **Cycle consistency:** after H→M→H, how far a spot lands from where it started, in units of the section radius.
-- **Stability:** variance over seeds, N, τ and the field's hyperparameters.
+- **Parallel sections:** a query embryo's sections should map to images that share a normal and keep their order and spacing. The volume pipeline gets this almost by construction, so the check catches a stage 2 that bends the volume.
+- **Direction symmetry:** with equal τ, P(H→M) = P(M→H)ᵀ by construction; report it whenever τ differs.
+- **Cycle consistency** (H→M→H) and **stability** over seeds, N, τ and field settings.
 
 ### 2e. Does selection pick well?
 
-The volume pipeline makes fewer choices than A, which picks a target section for every query. Its choices are the stage-2 parameters (τ, ε, the z-stretch s). For every choice made by an objective, report:
-- the Spearman correlation between the objective and κ_bal over the candidates;
-- the **regret:** the κ_bal of the label-best candidate minus that of the objective-best one.
-
-For A, the candidates are the real target sections of each query (already in the report). A choice with regret > 0.05 is fixed by hand, not left to the objective.
+The volume pipeline chooses only τ, ε and the z-stretch s; A also picks a target section per query. For every choice made by an objective, report the Spearman correlation between objective and κ_bal over the candidates, and the **regret**: the κ_bal of the label-best candidate minus that of the objective-best one. A choice with regret > 0.05 is fixed by hand.
 
 ### 2f. Ceilings: same species
 
-- **Within an embryo (W).** For A: each section against the other sections of its own embryo. It measures the 2D machinery when nothing differs but the section.
-- **Odd/even split (S).** One embryo's odd sections against its even sections, as two volumes (§3, G2). This is the volume pipeline's within-embryo ceiling. Its true map is known.
-- **Between embryos.** Two embryos of one stage. Only embryos with ≥ 2 sections form a volume, so H1–H3 (and M3) serve the volume pipelines. M1 and M2 have a one-section query and remain A's ceilings.
-- **The cross-species score as a share of the matching ceiling.**
+- **W (within embryo):** each section against the other sections of its own embryo, for A.
+- **S (odd/even split):** one embryo's odd against its even sections, as two volumes (G2). The true map is known.
+- **Between embryos of one stage:** H1–H3 and M3 serve the volume pipelines; M1 and M2 have one query section and serve A only.
 
 ### 2g. Floors and nulls
 
-For the 2D reference A (implemented):
-- a random real section (the expectation over the candidates);
-- the laterality partner (closest L);
-- rigid placement only (OT-ICP from the selected coupling);
-- feature-only OT, geometry-only GW and SCOT;
-- the organ-frequency prior (κ_bal = 0 by construction);
-- the label oracle, which shows the headroom.
+- **For A:** a random real section, the laterality partner (closest L), rigid placement only, feature-only OT, geometry-only GW, SCOT, the organ-frequency prior (κ_bal = 0), and the label oracle (headroom).
+- **For the volumes:** feature-only OT and geometry-only GW between the volumes, and the point-cloud ablation, which the field must beat.
 
-For the volume pipelines:
-- the same stage 2 with features only (linear OT between the volumes) and with geometry only (GW without features);
-- the point-cloud ablation (1e), which is the floor that the field must beat.
-
-**A possible claim for the paper.** Across the series in §4, aligning field-sampled volumes raises κ_bal over the objective-chosen 2D alignment of real sections on most pairs. It closes a stated share of the gap to the same-species ceilings and passes the guardrails.
+**A possible claim for the paper.** Across the series, aligning field-sampled volumes raises κ_bal over the objective-chosen 2D alignment on most pairs, closes a stated share of the gap to the same-species ceilings, and passes the guardrails.
 
 ---
 
 ## 3. Within-species gates for the field
 
-The field is tested within one species before any cross-species run. These tests isolate the representation from the species mismatch. Selection uses only the label-free scores. Label agreement is reported, but not used to choose.
+*Not in the code since the slim harness (§6a). Kept as the design for the held-out checks of §7c.*
 
-**G1. Held-out section.**
-- For every interior section k, build the stack and the field without k. Then predict k at its own spot positions (z from the full stack).
-- Compare four predictions:
-  - the field;
-  - McCann interpolation between k − 1 and k + 1 (`bench.stack.loo_check`);
-  - copying the nearer neighbour;
-  - copying the nearer neighbour, matched through the coupling.
-- **Scores:**
-  - held-out-gene r at the section's spots (label-free, *the selection score*);
-  - feature reconstruction error;
-  - label agreement (reported only).
-- **Pass:** the field beats copying the nearest section on held-out-gene r by more than the seed noise, and is no worse than McCann.
-- G1 also decides the feature z-scoring (section or embryo) and the field's hyperparameters.
+Before any cross-species run, the field is tested within one species, which isolates the representation from the species mismatch. Selection uses label-free scores only; label agreement is reported.
 
 **G2. Odd/even split.**
 - Split one stack into its odd and its even sections, and fit a field and a volume to each half.
@@ -297,23 +250,23 @@ The field is tested within one species before any cross-species run. These tests
 - **Pass:** the median 3D error is below half a section spacing, there is no plane locking (share ≤ 1.5 × chance), and the field does better than the point cloud.
 - Embryos with ≥ 6 sections: CS12-13_E2 (8), CS14-15_E2 (10), CS17_E1 (10), CS18_E1 (6), CS23_E2 (8; S2 and S4 excluded, no raw counts). Mouse stacks in the series have ≤ 5 sections (a 3/2 split). E16.5_E2 (13) is the only long mouse stack.
 
-**G3. Stack building.** The registration of stage 1 is scored on W (A's within-embryo ceiling) and on G1 and G2. This is where alternative registration methods compete (§5a).
+**G2. Odd/even split.** Fit a field and a volume to the odd and to the even sections of one stack, and align them with stage 2. The true map is the identity.
+- **Scores:** median 3D and z error of the barycentric map, in section spacings; *plane locking*, the share of mapped z within ±10 % of a spacing of the other half's sections (≈ 20 % by chance).
+- **Variants:** *common z* (both halves keep the full stack's z: the representation alone) and *re-estimated z* (each half estimates its own, larger gaps).
+- **Pass:** median 3D error < 0.5 spacings, locking ≤ 1.5 × chance, and better than the point-cloud ablation.
+- Long stacks: CS12-13_E2 (8), CS14-15_E2 (10), CS17_E1 (10), CS18_E1 (6), CS23_E2 (10), and E16.5_E2 (13), the only long mouse stack. The other mouse stacks have ≤ 5 sections.
 
-The thresholds are first guesses, to be revisited once the noise on the Dev tier is known.
+**G3. Stack building.** Stage 1 is scored on W, G1 and G2. This is where the registration methods of §1b and §5a compete.
+
+The thresholds are first guesses, to be revisited once the noise on Dev is known.
 
 ---
 
-## 4. Benchmark series: a representative subset of HESTA and MOSTA
+## 4. Benchmark series
 
-The series is frozen in [`bench/configs/series.yaml`](../bench/configs/series.yaml). It covers four axes:
-- **Stage:** early, mid and late.
-- **Depth overlap:** the L ranges of the two stacks overlap well, partly, or not at all.
-- **Stack shape:** many against few sections, and a wide against a narrow L range.
-- **Level:** within embryo, between embryos of one species, and across species.
+Frozen in [`bench/configs/series.yaml`](../bench/configs/series.yaml). It spans stage (early, mid, late), depth overlap (good, partial, none), stack shape, and level (within embryo, between embryos, across species). L is the laterality score from [`laterality/laterality_scores.csv`](../laterality/laterality_scores.csv) (`L_pair` for HESTA, raw L for MOSTA); stage windows follow [`hesta_mosta_slide_pairs.md`](hesta_mosta_slide_pairs.md).
 
-L is the laterality score from [`laterality/laterality_scores.csv`](../laterality/laterality_scores.csv): `L_pair` for HESTA, raw L for MOSTA. Stage windows follow [`hesta_mosta_slide_pairs.md`](hesta_mosta_slide_pairs.md). Every embryo of the cross-species pairs has ≥ 3 sections, so every cross-species pair forms two volumes.
-
-### 4a. Cross-species pairs (both embryos as volumes, both directions)
+### 4a. Cross-species pairs
 
 | # | Human (sections; L range) | Mouse (sections; L range) | Stage | Depth overlap | Why it is in the set |
 | --- | --- | --- | --- | --- | --- |
@@ -337,182 +290,209 @@ L is the laterality score from [`laterality/laterality_scores.csv`](../lateralit
 | M2 | E12.5_E2S1 → E12.5_E1 | between embryos, mouse | X4 | A (one query section) |
 | M3 | E14.5_E2 (2) → E14.5_E1 | between embryos, mouse | X5 | A, volumes (check the organ labels first) |
 
-E16.5_E1 ↔ E16.5_E2 (5 vs 13 sections) is the only mouse volume ↔ volume ceiling with two real stacks. It has no human partner, so it is optional.
+Optional: E16.5_E1 ↔ E16.5_E2 (5 vs 13 sections), the only mouse volume ↔ volume ceiling, with no human partner.
 
 ### 4c. Optional timing controls
 
-CS17_E1 ↔ CS18_E1 and E11.5_E1 ↔ E12.5_E1 (same species, adjacent stages). Together with X3 and X4, they separate the effect of timing from the effect of species. They are diagnostics only.
+CS17_E1 ↔ CS18_E1 and E11.5_E1 ↔ E12.5_E1 (same species, adjacent stages). With X3 and X4 they separate timing from species. Diagnostics only.
 
 ### 4d. Tiers and compute
 
 | Tier | Pairs | Use |
 | --- | --- | --- |
 | Dev | X1, X4 (+ W and S of their embryos) | Every code change, the noise margin, the gates |
-| Screen | X1–X5 (ranked), X6 (guardrail), H1/H2, M2, W, S | Every pipeline that passes Dev |
-| Full | Screen + H3, M1, M3, timing controls | Finalists only, and the numbers for the paper |
+| Screen | X1–X5 (ranked), X6 (guardrail), H1, H2, M2, W, S | Every pipeline that passes Dev |
+| Full | Screen + H3, M1, M3, timing controls | Finalists and the paper's numbers |
 
-**Cost.**
-- A needs n_q × n_t 2D solves per pair (30 for X4), and the current FGW run takes about 1 h for X4 in both directions.
-- The volume pipeline needs one field per embryo and seed (minutes on a GPU) and one 3D ↔ 3D solve per pair and stage-2 setting, which serves both directions. It should cost no more than A.
-- Riemannian FGW adds an all-pairs shortest-path computation on N samples; MGW adds the field's Jacobians at the samples.
+A needs n_q × n_t 2D solves per pair (30 for X4, about 1 h in both directions). The volume pipeline needs one field per embryo and seed (minutes on a GPU) and one 3D solve per pair and setting, so it should cost no more than A.
 
 ---
 
 ## 5. Methods for the two stages
 
-The aligner is chosen separately for each role:
-- **stage 1:** registering neighbouring sections of one embryo;
-- **stage 2:** aligning two volumes;
-- **reference:** 2D ↔ 2D on real sections.
-
 ### 5a. Stage 1: registration within an embryo
 
-| Method | Kind | Exists | Note |
-| --- | --- | --- | --- |
-| moscot FGW + OT-ICP | rigid (rotation or reflection) | `bench.stack`, current | The baseline |
-| PASTE2 | partial FGW (overlap fraction s) | no | Neighbouring sections overlap only partly |
-| Spateo (morpho alignment) | non-rigid, probabilistic, with expression | no | Builds 3D models from serial sections |
-| MOSAICField | affine OT, then a neural deformation field | no | Designed for serial slices; preliminary code, GPU |
-| STalign | LDDMM on rasterised images | no | Needs features rasterised into channels |
+"Rigid" means each section moves only by a rotation (or a reflection) and a translation: no scaling, shearing or warping, so distances within a section are preserved.
 
-They are scored on G3 (W, G1, G2). Non-rigid registration also changes the couplings that the field's depth loss uses, so a method can win on W and still lose on G1.
+| Method | Transform | Exists | Note |
+| --- | --- | --- | --- |
+| moscot FGW + OT-ICP | rigid | `bench.stack` (current) | The baseline (§1b) |
+| FGW + one Procrustes fit | rigid | `stack.coupling: moscot_procrustes` | Ablation: what OT-ICP adds (§1b). X4: 0.530 against 0.581 |
+| MGW + OT-ICP | rigid | `stack.coupling: mgw_icp` | Learned-metric coupling (§1b). X4: same as moscot + OT-ICP |
+| PASTE2 | rigid | no | Partial FGW, for partly overlapping neighbours |
+| Spateo (morpho alignment) | non-rigid | no | Probabilistic, uses expression; builds 3D models |
+| MOSAICField | affine, then a neural deformation field | no | Designed for serial slices; preliminary code, GPU |
+| STalign | non-rigid (LDDMM) | no | Needs features rasterised into image channels |
+
+All are scored on G3. Non-rigid methods also change the couplings that the depth loss uses, so a method can win on W and still lose on G1.
 
 ### 5b. Stage 2: aligning the volumes (the ladder)
 
-| Method | Intra-volume cost | Learned? | Exists |
-| --- | --- | --- | --- |
-| **FGW** | Euclidean distance | no | `solvers.fgw` (dense, any dimension; τ for unbalanced) |
-| **Riemannian FGW** | Shortest path in a 3D kNN graph of the samples | no | `geometry.knn_graph` + Dijkstra; a small wrapper |
-| **MGW** | Shortest path under the pull-back metric of the field f | the field | `geometry.pullback_metric_field` + `geodesic_distances_fast` (check 3D); a wrapper that passes f as φ |
+| Method | Intra-volume cost | Exists |
+| --- | --- | --- |
+| **FGW** | Euclidean distance | `V_fgw` (`solvers.fgw`, any dimension; τ for unbalanced) |
+| **Riemannian FGW** | Shortest path in a 3D kNN graph | `V_rfgw` (`solvers.knn_geodesic`) |
+| **MGW** | Shortest path under the pull-back metric of f | `V_mgw` (`solvers.pullback_geodesic` on the field's feature head) |
 
-- FGW → Riemannian FGW tests whether *following the tissue* helps. Geodesics stay inside the volume and tolerate differences in bending and posture.
-- Riemannian FGW → MGW tests whether *the learned metric* helps. Distances measured as expression change may tolerate species differences in organ size.
-- **Nulls:** feature-only OT and geometry-only GW between the volumes (2g).
-- **External:** Spateo (3D ↔ 3D) and STalign (volume ↔ volume, on rasterised fields). They only enter after the gates of 5c.
+- FGW → Riemannian FGW tests whether *following the tissue* helps (tolerance to bending and posture).
+- Riemannian FGW → MGW tests whether *the learned metric* helps (tolerance to differences in organ size).
+- External: Spateo and STalign in 3D, only after §5c.
 
 ### 5c. Adopting external tools
 
-An external tool gets adaptation work only if it seems to perform well *and* could become part of the pipeline. So it passes three gates:
+An external tool gets adaptation work only if it passes three gates:
+1. **Triage on Dev, with minimal conversion:** the tool's own preprocessing and defaults, our ortholog features (or the first PCs rasterised, for image tools), no tuning.
+2. **Performance:** within the noise margin of the best in-house method in its role (G3 for stage 1, median Δκ for stage 2), or clearly better on one Dev pair.
+3. **Pipeline fit:** installable and maintained, runs on our hardware within the budget of §4d, and consumes and returns what the pipeline passes around.
 
-1. **Triage on the Dev tier, with minimal input conversion.**
-   - Use the tool's own preprocessing and default parameters, in its role (5a or 5b).
-   - Give it the ortholog embedding or the ortholog genes as features, or a generic rasterisation of the first PCs for image tools.
-   - No tool-specific tuning.
-2. **Performance gate.** In its role, the tool must:
-   - come within the noise margin of the best in-house method (on G3 for stage 1, on median Δκ for stage 2); or
-   - beat it clearly on at least one Dev pair.
-3. **Pipeline gate.** The tool must also:
-   - be installable and maintained;
-   - run on our hardware;
-   - fit the compute budget of 4d;
-   - consume and return what the pipeline passes around (coordinates, features, a coupling or a deformation).
-
-A tool that fails triage is reported as run, with its minimal setup, and is not pursued.
+A tool that fails triage is reported with its setup and not pursued.
 
 ---
 
 ## 6. Proposed order of experiments
 
-Each step says what tells us to continue.
+The harness was cut down in October 2026 to the two questions of the status note (§0). All pipelines live in [`bench/configs/bench.yaml`](../bench/configs/bench.yaml):
 
-1. **Harness, reference, ceilings (implemented).**
-   - `mgw.bench`: κ_bal with OMS and Cohen's κ, the guardrails, the series, A with FGW in both directions, its nulls, W and the between-embryo ceilings, the report and the viewer.
-   - This revision: K over the target embryo, fold-overs in 3D, the per-embryo z-scoring option, and no pipelines from earlier strategies.
-   - Run A on Dev (5 seeds) for the noise margin, then on Screen.
-   - *Go:* one table with κ_bal, oracle, nulls and ceilings for every pair.
-2. **Gates G1 and G2 on the Dev embryos** (CS18_E1, CS12-13_E2, E12.5_E1, E9.5_E2). *Implemented (code only, results pending):* `python -m mgw.bench gates g1|g2` with `bench/configs/gates.yaml` (§6a).
-   - Fit the field, choose its hyperparameters and the feature z-scoring by the label-free G1 score.
-   - Rerun A on the chosen features, which then becomes the reference.
-   - *Go:* the field passes G1 and G2. If it fails G1 but the point cloud passes G2, continue with the point-cloud ablation alone.
-3. **The volume pipeline with FGW on Dev (X1, X4), both directions.** *Implemented (code only, results pending):* V_fgw, the nulls V_linear and V_gw, and the point-cloud ablation PC_fgw, in `bench/configs/step3.yaml`. The report adds V, PC, dV and dPC against A, and `volumes.csv` (§6a).
-   - Compare with A, with the point-cloud ablation and with the volume nulls.
-   - Check rejected mass and the depth of the matched mass in X4.
-   - *Go:* the rule of 2a on Dev, then on Screen.
-4. **Stage-2 ladder on fixed volumes:** Riemannian FGW and MGW, and the z-stretch scan with its regret check. External 3D tools enter here only after 5c.
-5. **Stage-1 registration screen** on G3 (W, G1, G2): OT-ICP against the methods of 5a that passed triage, then the downstream Δκ of the best one.
-6. **Full tier.** Cross the best stage-1 method with the best stage-2 method. These numbers are the benchmark: Δκ, wins, ceiling share and the guardrails.
+| Question | Pipelines |
+| --- | --- |
+| 2D tools | `A_fgw`, `A_mgw` |
+| Within-embryo tools | `S_moscot_icp`, `S_moscot_procrustes`, `S_mgw_icp` |
+| Between-embryo tools | `V_fgw`, `PC_fgw`, `V_rfgw`, `V_mgw` |
 
-### 6a. Implementation of steps 2–3: choices where the notes leave room
+1. **All pipelines on X4, seed 0 (done, §7a–§7b, §7d).**
+   - 2D: FGW = MGW.
+   - Within the embryo: moscot + OT-ICP is the best, and the cheapest.
+   - Between the embryos: the stack points beat 2D by +0.136. The field volumes lose to 2D.
+2. **Why the field volumes lose (done, §7c).** The field's features, not the points between the sections, cost most of the score. A grid over size, bandwidth and steps, and a 512×6 field, raise the fit only a little. Relaxing the smoothness and depth losses raises it a lot and lifts the volume above 2D.
+3. **Next: the field's regularization.**
+   - Held-out sections for the relaxed field (L_noreg): does it still predict missing sections?
+   - Smoothness and depth loss separately: which of the two sets the cap?
+   - Only then XL on LRZ (`bench/scripts/lrz_field_scale.sbatch`).
+4. **Next: the unbalanced solve.** Find ε and τ at which OTT's unbalanced correction does not return NaN, and check where the rejected mass lies in X4.
+5. **Dev tier** (X1 and X4, seeds 0–2) with the chosen field, for the seed noise. Then Screen (X1–X5).
+6. **Full tier:** the best stage 1 with the best stage 2. These are the benchmark numbers.
 
-These are first choices. They are recorded so that results can be read against them. The hyperparameters are guesses, to be set by G1.
+### 6a. Implementation choices for steps 2–3
 
-**The field (§1c, `field.py`).**
-- **Network.** One MLP (width 128, depth 3) on anisotropic Fourier features (64 frequencies; σ_xy = 4 and σ_z = 1 cycles per stack radius) plus the raw coordinates. Two heads, f and the occupancy logit, share the trunk.
-- **Normalization.** Coordinates are centred and divided by the stack's in-plane RMS radius (one scale for every axis). Features are centred and divided by their RMS.
-- **Weights.** features 1, depth 1, occupancy 0.5, smoothness 1e-3.
-- **Displacement pairs.** They are sampled by mass, and every gap carries the same total weight.
-- **Occupancy.**
-  - *Negatives:* in-plane points farther than 2 spot spacings from their section's tissue, and gap points farther than 2 spacings from every segment of their gap. Segments are compared in-plane at the nearest of 9 levels of t.
-  - *Positives:* the spots, and segment points jittered in-plane by 0.5 spacings.
-- **Smoothness.** |J_f|²_F at the spot and segment points of each batch (three JVPs). The depth loss is one JVP along the segment.
-- **One field per pair, embryo and seed.** f regresses the pair's own embedding, so fields and volumes are cached per pair.
+First choices, recorded so results can be read against them. Details are in the module docstrings.
 
-**Sampling (§1d).**
-- The box is the spots' in-plane bounding box plus 2 spacings, times [z_first, z_last].
-- The stack's z (the variogram gaps) and xy share one unit, so Sobol points that are uniform in this box already give an isotropic density. No further z scaling is applied.
-- The reported spacing is h = (box volume × acceptance / N)^{1/3}.
+**Field (`field.py`).**
+- MLP on anisotropic Fourier features (64 frequencies; σ_z = 1 cycle per stack radius) plus raw coordinates; two heads (f, occupancy logit).
+  - First version: width 128, depth 3, σ_xy = 4, 3000 steps.
+  - Since the grid on X4 (§7c): width 256, depth 4, σ_xy = 8, 20 000 steps. This is the best held-out R² of 12 settings, the label-free choice.
+  - Optional residual blocks (`field.residual`, `field.layernorm`) for deeper nets, and `field.tf32` for A100 and H100.
+- Coordinates centred and divided by the stack's in-plane RMS radius (one scale for all axes); features divided by their RMS.
+- Loss weights: features 1, depth 1, occupancy 0.5, smoothness 1e-3. Displacement pairs are sampled by mass, with equal total weight per gap.
+- Occupancy: negatives farther than 2 spot spacings from tissue or segments; positives jittered in-plane by 0.5 spacings.
 
-**Stage 2 (§1e, `volume.py`).**
-- **Cross cost.** `Task.cross_cost`, i.e. cdist divided by the pair's scale from the *real* features. The field features are not rescaled.
-- **Unbalancedness.** τ = 0.95 on both sides, i.e. ρ ≈ 0.1 at ε = 5e-3.
-- **NaN fallback.** OTT's unbalanced correction gives NaN at small ε and τ ≤ 0.9. The solve then falls back to no correction and records `ugw_fallback`.
-- **Nulls.** The same unbalanced solve with the features only (linear OT) or the geometry only (GW).
-- **Hook for step 4.** New aligners are dispatched on the pipeline's `aligner` key.
+**Sampling.** Scrambled Sobol in the in-plane bounding box + 2 spacings, times [z_first, z_last]. z and xy share one unit, so the density is isotropic. Sample spacing h = (box volume × acceptance / N)^{1/3}.
 
-**Back to the spots (§1f).**
-- **A_q.** Each real spot spreads over its 8 nearest samples, with Gaussian weights at the sample spacing.
-- **B_t.** Each target sample pools the bin counts of its 3 nearest real target spots, 1/3 each (compositions, one-hot labels, held-out genes and L).
-- **The point cloud (PC_fgw).**
-  - If there are more than N stack points, each section is subsampled in proportion to its spots.
-  - Masses are proportional to the slab, half the gap to each neighbour. An end section gets its inner half only, and slabs are floored at 5 % of the mean so a zero gap does not delete a section.
-  - A_q takes each spot to the nearest kept point of its own section (the identity when nothing is dropped), and B_t is the identity.
-- **Rows.** Role `selected`, target `volume` or `points`, `L_target` = the mass-weighted L reached.
-- **Extra columns.**
-  - `rejected_query`: 1 minus the mass ratio over the section's own samples. It is signed: negative means the unbalanced solve added mass.
-  - `rejected_side_*`: the rejected mass of each whole measure.
-  - `L_reached_rel`, `z_reached_rel`: where the matched mass lands in the target's L and depth ranges.
-  - `normal_dev_deg`, `order_rho`: the parallel-section check of §2d.
-- **X6 guardrail for the volumes.** A query section passes when `L_reached_rel` lies in the end fraction of the target's L range on the query embryo's side. The side is whichever embryo has the higher mean L.
+**Stage 2 (`volume.py`).**
+- Cross cost: `Task.cross_cost`, scaled from the *real* features.
+- τ = 0.95 on both sides (ρ ≈ 0.1 at ε = 5e-3). If OTT's unbalanced correction returns NaN (small ε, τ ≤ 0.9), the solve drops the correction and records `ugw_fallback`.
+- New aligners dispatch on the pipeline's `aligner` key.
 
-**G1 (§3, `gates.py`).**
-- **The stack without k is not re-registered.**
-  - The other sections keep their positions and z in the full stack's frame.
-  - k − 1 and k + 1 are joined by their direct coupling, as in `stack.loo_check`, cached once per embryo.
-  - Re-registering would move the frame, and k's spots would then need a registration against k's own data.
-- **Gene predictions.** The field predicts features, not genes. So every predictor's features go through one feature → held-out-gene kNN regressor (15 neighbours, distance-weighted), fitted on the real spots of the other sections.
-  - `r_heldout`, the median per-gene r over k's spots, is the selection score.
-  - Baselines that transport genes directly also report `r_direct`.
-  - The regressor applied to k's true features (`true_features`) is the ceiling of this path.
-- **"Matched through the coupling".** The McCann positions at k's gap fraction, but every value copied from the nearer endpoint of its segment, with no mixing.
-- **Label agreement.** A kNN classifier on the predicted features, and the transported labels for the baselines. It is reported only.
-- **Margin and pass rule.** The margin is 2 × the SD over seeds of the field's r_heldout per embryo; it is 0 with one seed. The field passes when Δ(field − nearest) > margin and Δ(field − McCann) ≥ −margin.
-- **Selection.** The grid (zscore_by × field settings) is ranked by the field's mean r_heldout over the embryos.
-- **Features.** Each embryo's field regresses the features of its stage-2 pair (CS18_E1 and E12.5_E1: X4; CS12-13_E2 and E9.5_E2: X1).
+**Back to the spots.**
+- A_q: 8 nearest samples, Gaussian weights at the sample spacing. B_t: 3 nearest real target spots, 1/3 each.
+- Point cloud: sections subsampled in proportion to their spots if needed; slab masses floored at 5 % of the mean (end sections get their inner half only).
+- Only κ_bal is stored (`scores.csv`), plus the transferred organ per query spot (`transfer.npz`) for the figure. The rejected mass is logged per solve.
 
-**G2 (§3).**
-- **Scope.** Embryos with ≥ 4 sections (a 2/2 split at least).
-- **Units.** Errors are in units of the full stack's mean gap.
-- **What is scored.** The barycentric map of A_q P on the source half's *real spots* whose true z lies within the target half's depth range. This set is common to the field and the point cloud. The field also reports the error of its own samples.
-- **Locking.** The tolerance is ±10 % of the target half's mean spacing in the full frame. The chance share is computed from the plane layout (≈ 20 %). `lock_true` is the share an exact map would give (≈ 0 for interleaved halves).
-- **Re-estimated z.** `estimate_gaps` on each half's stack features, anchored at the half's first section, and carried back to the full frame through the half's own sections (piecewise linear).
-- **Pass.** Median 3D error < 0.5, locking ≤ 1.5 × chance, and a field error below the point cloud's.
-
-**Synthetic tests.**
-- On the synthetic pair the variogram underestimates the gaps, often to 0:
-  - the stack embedding is z-scored per section, which removes the depth offsets (§1c);
-  - cross-section neighbours sit closer in-plane than the variogram's first bin.
-- The synthetic stacks therefore use the true gaps.
-- The same bias may affect real stacks with small gaps; G2's re-estimated variant would show it.
+**Removed with the slim harness (October 2026).**
+- **G1 and G2** (`gates.py`), the extra columns of the volume pipelines and the synthetic pair (`synthetic.py`). They remain in the git history (commit `c6a8011` and earlier).
+- **The held-out check survives as a diagnostic.** `bench/scripts/field_scale.py` and the field grid (§7c) fit fields without one interior section k: the other sections keep their full-stack positions, and k − 1, k + 1 are joined by their cached direct coupling. They then score R² of f at k's spots, against copying the nearer neighbour section.
 
 ---
 
-## 7. Open questions
+## 7. Results so far (X4, seed 0)
 
-- **Beyond the outermost sections.** The volume is clipped at the first and last section. Should it extend by half a gap? Is there a principled outer boundary in z, such as the midline for medial stacks?
-- **The z-scale.** The gaps are lower bounds. Is a z-stretch chosen by the stage-2 objective trustworthy, or should z come from |ΔL| or the metadata where those exist?
-- **The depth loss.** Supervising f along the displacement pairs ties the field to the registration's couplings. How strongly should it be weighted against smoothness? Does an entropic coupling or its peaks make the better pairs?
-- **Evaluation in the gaps.** Target samples in a gap are scored with the labels of the nearest real spots. Is that fair to the volume pipeline in stacks with large gaps (X4)?
-- **N and τ.** How many samples per embryo, and how much unbalancedness? Both trade resolution and robustness to partial overlap against cost.
-- **Non-rigidity.** MGW's metric and a non-rigid stage 1 add freedom. At what point is a good κ_bal the warp's doing rather than the correspondence's?
-- **Thresholds.** The regret of 0.05, the 5 % fold-overs, the ≥ 3 of 5 wins and the gate thresholds are first guesses. Should they be set from the Dev tier, as the noise margin is?
-- **Unit of evaluation.** Labels are noisy at boundaries, and organs are not exact homologues across species. Is κ_bal at the organ level enough?
+All numbers are from one pair (X4: CS18_E1 ↔ E12.5_E1) and one seed, run on tueilnt-sim14 (RTX 4080 Super), October 22–24, 2026. They carry no seed noise yet, so differences below about 0.01–0.02 should not be read. κ_bal is the mean of both directions. Reports and tables:
+- `data/bench/reports/dev/` (the benchmark);
+- `data/bench/diag/field_grid_1022.csv` (the field grid);
+- `data/bench/reports/field_scale/X4_seed0.csv` (the field sizes).
+
+### 7a. 2D ↔ 2D
+
+| Tool | κ_bal | human stack | mouse stack |
+| --- | --- | --- | --- |
+| FGW (`A_fgw`) | **0.303** | 0.287 | 0.319 |
+| MGW (`A_mgw`) | 0.302 | 0.286 | 0.317 |
+
+- The two tie. MGW costs twice the time: one φ per section, about 2.5 min each.
+- For all six human query sections, FGW selects the same mouse section, E12.5_E1S3.
+
+### 7b. 3D, within the embryo (coupling neighbouring sections)
+
+| Tool | CS18_E1 | E12.5_E1 | Mean |
+| --- | --- | --- | --- |
+| moscot FGW + OT-ICP (`moscot_icp`) | 0.561 | 0.601 | **0.581** |
+| moscot FGW + one Procrustes fit (`moscot_procrustes`) | 0.479 | 0.581 | 0.530 |
+| MGW + OT-ICP (`mgw_icp`) | 0.561 | 0.601 | 0.581 |
+
+- OT-ICP is worth about 0.05. MGW's start changes nothing after OT-ICP.
+- `stack.coupling` stays `moscot_icp`. The report marks `mgw_icp` as best, but only by a 1e-5 difference.
+
+### 7c. Why the field volumes lose: the field's features
+
+The first runs (§7d) put the field volumes below 2D (0.268 against 0.303), but the stack points far above (0.439). The diagnostics separate the representation's parts:
+
+1. **Same points, other features.** Stage 2 on the stack points with the field's f in place of the measured features drops κ_bal from 0.439 to 0.295. The field's features cost about 0.14 of the 0.17 gap. Sampling the gaps costs only about 0.03.
+2. **The first field underfits its own spots.** It explains 37–67 % of the variance per section, and its output keeps 43–62 % of the measured spread.
+3. **As a prior across gaps it works.** On every interior held-out section (7 of 7), the field beats copying the nearer neighbour section. Held-out R² is 0.08–0.45 against −0.64 to 0.43.
+4. **Size, bandwidth and steps help little.** The grid covered 12 settings: 3000 or 20 000 steps × 128×3 or 256×4 × σ_xy 4, 8 or 16.
+   - Fit R² 0.46 → 0.60, volume 0.243 → 0.293.
+   - Held-out R² stays flat at 0.280–0.296.
+   - At 3000 steps a wider bandwidth hurts; it needs more training. The winner by held-out R² (256×4, σ_xy 8, 20 000 steps) is now the default.
+5. **A much larger net hits a plateau.** L is a 512×6 residual net with 256 frequencies, 100 000 steps and 1.86M parameters, trained in 2.3 h per field.
+   - Fit 0.662; κ_bal on the points 0.384, on the volume 0.292.
+   - The feature loss stalls (0.40 → 0.39 between 50k and 100k steps).
+6. **The regularizers set the cap.** L_noreg is the same net with no smoothness penalty and a depth loss of 0.1 instead of 1. It trains in 52 min per field.
+
+| Field | Fit R² (CS18 / E12.5) | Spread kept | κ_bal points + field | κ_bal volume |
+| --- | --- | --- | --- | --- |
+| first (128×3, 3000 steps) | 0.466 / 0.567 | 0.47 / 0.55 | 0.295 | 0.268 |
+| grid winner (256×4, σ_xy 8, 20k) | 0.543 / 0.646 | 0.52 / 0.60 | 0.349 | 0.290 |
+| L (512×6 residual, 100k) | 0.603 / 0.722 | 0.56 / 0.66 | 0.384 | 0.292 |
+| **L_noreg** (no smoothness, depth 0.1) | **0.863 / 0.931** | **0.76 / 0.85** | **0.453** | **0.317** |
+
+Without the regularizers:
+- The fit jumps to about 0.9.
+- On the stack points, the field's features now beat the measured ones (0.453 against 0.439), perhaps because f averages out noise between neighbouring spots.
+- The volume beats 2D for the first time (0.317 against 0.303).
+
+The price:
+- The depth loss rises from 0.36 to 1.29 (CS18_E1) and from 0.26 to 0.89 (E12.5_E1), so f between the sections is less constrained.
+- The solve rejects more mass (0.56–0.63).
+
+Held-out R² of L_noreg is not measured yet. It decides whether the gain is real or only memorization of the measured sections.
+
+### 7d. 3D, between the embryos (volume ↔ volume)
+
+| Tool | First field | Grid-winner field | Δ against 2D (grid-winner) |
+| --- | --- | --- | --- |
+| FGW on the stack points (`PC_fgw`, no field) | **0.439** | **0.439** | **+0.136** |
+| FGW on the field volume (`V_fgw`) | 0.268 | 0.290 | −0.014 |
+| Riemannian FGW (`V_rfgw`) | 0.267 | 0.290 | −0.014 |
+| MGW on the field's metric (`V_mgw`) | 0.266 | 0.288 | −0.015 |
+| *FGW on the volume of L_noreg (§7c)* | | *0.317* | *+0.014* |
+
+- The three aligners tie on every field, so the field limits them, not the aligner.
+- Every 3D solve fell back to the unbalanced solve without OTT's correction (§1e). The rejected mass is 46–48 % (field volumes) and 70 % (stack points).
+
+**What this means so far:**
+- Aligning whole embryos in 3D pays off on X4 when the measured spots are aligned directly: +0.136 over the best 2D alignment.
+- A field-sampled volume helps only once the field fits the data closely. Even then it stays well below the stack points (0.317 against 0.439).
+- Before the field approach earns its cost, it must show that it still predicts missing sections with the regularizers relaxed (§6, step 3).
+
+---
+
+## 8. Open questions
+
+- **Beyond the outermost sections.** Extend the volume by half a gap? Is there a principled outer boundary, such as the midline for medial stacks?
+- **The z-scale.** Is a z-stretch chosen by the stage-2 objective trustworthy, or should z come from |ΔL| or metadata?
+- **The depth loss.** It and the smoothness penalty cap how well the field fits the spots (§7c). How weak can they be before the field stops predicting missing sections? Which of the two matters? Do entropic couplings or their peaks make better pairs?
+- **Evaluation in the gaps.** Is nearest-spot labelling fair to the volumes in stacks with large gaps (X4)?
+- **N and τ.** Both trade resolution and robustness to partial overlap against cost. With OTT's correction failing, the effective rejection is far above τ = 0.95 (§1e).
+- **Field or points?** On X4 the stack points beat every field volume (§7d). Does the field add anything beyond filling the gaps, and is filling them worth it?
+- **Non-rigidity.** With MGW's metric and a non-rigid stage 1, when is a good κ_bal the warp's doing rather than the correspondence's?
+- **Thresholds.** Should regret 0.05, 5 % fold-overs, ≥ 3 of 5 wins and the gate thresholds be set from Dev, like the noise margin?
+- **Unit of evaluation.** Labels are noisy at boundaries and organs are not exact homologues. Is organ-level κ_bal enough?
