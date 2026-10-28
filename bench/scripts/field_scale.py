@@ -8,8 +8,9 @@ other field), so it runs anywhere: sim14, or one SLURM array task per embryo (--
 `score` uses the cached fields of every size that has both and writes reports/field_scale/<pair>_seed<s>.csv:
 - fit_<embryo>: R^2 of f at the embryo's own real spots (mean over sections; variance about each section's mean);
 - std_ratio_<embryo>: std(f) / std(measured features) at those spots (< 1: the field smooths);
-- kappa_pts_field: kappa_bal of stage 2 (unbalanced FGW) on PC_fgw's stack points with the field's features;
-- kappa_vol: kappa_bal on the field's sampled volume, as V_fgw.
+- kappa_pts_field: kappa_bal of stage 2 (unbalanced FGW) on the stack points of pts2pts_s-euc_f-euc_ub, with the
+  field's features;
+- kappa_vol: kappa_bal on the field's sampled volume, as vol2vol_s-euc_f-euc_ub.
 kappa_bal is for information only; no setting here is chosen by labels.
 """
 import argparse
@@ -53,7 +54,7 @@ def context(args, size):
     cfg = config.load(args.config, SIZES[size] + list(args.set))
     pair = series.load(cfg.series_path()).pairs[args.pair]
     root = prepare.bench_root(args.root)
-    return cfg, pair, root, Task(cfg, "V_fgw", pair, args.seed, root, log=lambda *a: None)
+    return cfg, pair, root, Task(cfg, "vol2vol_s-euc_f-euc_ub", pair, args.seed, root, log=lambda *a: None)
 
 
 def sides(task):

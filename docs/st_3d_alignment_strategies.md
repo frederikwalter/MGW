@@ -140,7 +140,7 @@ Both species therefore share one coordinate system. The cross cost is the Euclid
 One 3D ↔ 3D solve per pair, with the cross cost from the field features:
 - **Unbalanced on both sides, with the same τ.** Depth ranges overlap only partly in most pairs (§4), and a balanced coupling would squeeze one range onto the other. Equal τ keeps the solve symmetric, so P and Pᵀ serve both directions. Example: in X4 the mouse stack has no sections between L 0.12 and 0.75, exactly where the human stack lies.
 - **The z-scale.** Distances are max-normalised, so size does not matter, but the ratio of z to in-plane does. The first runs use the variogram z. A scan over a z-stretch s of one side, chosen by the objective, comes later, with its own regret check (§2e).
-- **The aligner ladder** (§5b): FGW on Euclidean distances; Riemannian FGW on shortest paths in a 3D kNN graph; MGW with the pull-back metric of f. The field already is the φ that MGW would otherwise train. On X4 the three score the same on the field volume (0.288–0.290, §7d): the representation limits them, not the aligner.
+- **The aligner ladder** (§5b): FGW on Euclidean distances; FGW on shortest paths in a 3D kNN graph; MGW with the pull-back metric of f. The field already is the φ that MGW would otherwise train. On X4 the three score the same on the field volume (0.288–0.290, §7d): the representation limits them, not the aligner.
 - **The unbalanced solve.** In every 3D run so far, OTT's unbalanced correction returned NaN, and the solve was retried without it. That retry rejects 46–63 % of the mass of each side, far more than τ = 0.95 implies. This is unresolved.
 
 **Point-cloud ablation.** The same stage 2 on the raw stack points, with real features and masses proportional to each section's slab (half the gap to each neighbour). It isolates what the field adds over weighting the real points by volume.
@@ -322,12 +322,12 @@ All are scored on G3. Non-rigid methods also change the couplings that the depth
 
 | Method | Intra-volume cost | Exists |
 | --- | --- | --- |
-| **FGW** | Euclidean distance | `V_fgw` (`solvers.fgw`, any dimension; τ for unbalanced) |
-| **Riemannian FGW** | Shortest path in a 3D kNN graph | `V_rfgw` (`solvers.knn_geodesic`) |
-| **MGW** | Shortest path under the pull-back metric of f | `V_mgw` (`solvers.pullback_geodesic` on the field's feature head) |
+| **FGW** | Euclidean distance | `vol2vol_s-euc_f-euc_ub` (`solvers.fgw`, any dimension; τ for unbalanced) |
+| **kNN-graph FGW** | Shortest path in a 3D kNN graph | `vol2vol_s-knn_f-euc_ub` (`solvers.knn_geodesic`) |
+| **MGW** | Shortest path under the pull-back metric of f | `vol2vol_s-pb_f-euc_ub` (`solvers.pullback_geodesic` on the field's feature head) |
 
-- FGW → Riemannian FGW tests whether *following the tissue* helps (tolerance to bending and posture).
-- Riemannian FGW → MGW tests whether *the learned metric* helps (tolerance to differences in organ size).
+- FGW → kNN-graph FGW tests whether *following the tissue* helps (tolerance to bending and posture).
+- kNN-graph FGW → MGW tests whether *the learned metric* helps (tolerance to differences in organ size).
 - External: Spateo and STalign in 3D, only after §5c.
 
 ### 5c. Adopting external tools
@@ -343,13 +343,13 @@ A tool that fails triage is reported with its setup and not pursued.
 
 ## 6. Proposed order of experiments
 
-The harness was cut down in October 2026 to the two questions of the status note (§0). All pipelines live in [`bench/configs/bench.yaml`](../bench/configs/bench.yaml):
+The harness was cut down in October 2026 to the two questions of the status note (§0). All pipelines live in [`bench/configs/bench.yaml`](../bench/configs/bench.yaml); their names follow the scheme in [`cross_species_alignment_results.md`](cross_species_alignment_results.md#run-names):
 
 | Question | Pipelines |
 | --- | --- |
-| 2D tools | `A_fgw`, `A_mgw` |
-| Within-embryo tools | `S_moscot_icp`, `S_moscot_procrustes`, `S_mgw_icp` |
-| Between-embryo tools | `V_fgw`, `PC_fgw`, `V_rfgw`, `V_mgw` |
+| 2D tools | `sec2sec_s-euc_f-euc_bal`, `sec2sec_s-pb_f-euc_bal` |
+| Within-embryo tools | `sec2nbr_s-euc_f-euc_icp`, `sec2nbr_s-euc_f-euc_procrustes`, `sec2nbr_s-pb_f-euc_icp` |
+| Between-embryo tools | `vol2vol_s-euc_f-euc_ub`, `pts2pts_s-euc_f-euc_ub`, `vol2vol_s-knn_f-euc_ub`, `vol2vol_s-pb_f-euc_ub` |
 
 1. **All pipelines on X4, seed 0 (done, §7a–§7b, §7d).**
    - 2D: FGW = MGW.
@@ -406,8 +406,8 @@ All numbers are from one pair (X4: CS18_E1 ↔ E12.5_E1) and one seed, run on tu
 
 | Tool | κ_bal | human stack | mouse stack |
 | --- | --- | --- | --- |
-| FGW (`A_fgw`) | **0.303** | 0.287 | 0.319 |
-| MGW (`A_mgw`) | 0.302 | 0.286 | 0.317 |
+| FGW (`sec2sec_s-euc_f-euc_bal`) | **0.303** | 0.287 | 0.319 |
+| MGW (`sec2sec_s-pb_f-euc_bal`) | 0.302 | 0.286 | 0.317 |
 
 - The two tie. MGW costs twice the time: one φ per section, about 2.5 min each.
 - For all six human query sections, FGW selects the same mouse section, E12.5_E1S3.
@@ -461,10 +461,10 @@ Held-out R² of L_noreg is not measured yet. It decides whether the gain is real
 
 | Tool | First field | Grid-winner field | Δ against 2D (grid-winner) |
 | --- | --- | --- | --- |
-| FGW on the stack points (`PC_fgw`, no field) | **0.439** | **0.439** | **+0.136** |
-| FGW on the field volume (`V_fgw`) | 0.268 | 0.290 | −0.014 |
-| Riemannian FGW (`V_rfgw`) | 0.267 | 0.290 | −0.014 |
-| MGW on the field's metric (`V_mgw`) | 0.266 | 0.288 | −0.015 |
+| FGW on the stack points (`pts2pts_s-euc_f-euc_ub`, no field) | **0.439** | **0.439** | **+0.136** |
+| FGW on the field volume (`vol2vol_s-euc_f-euc_ub`) | 0.268 | 0.290 | −0.014 |
+| kNN-graph FGW (`vol2vol_s-knn_f-euc_ub`) | 0.267 | 0.290 | −0.014 |
+| MGW on the field's metric (`vol2vol_s-pb_f-euc_ub`) | 0.266 | 0.288 | −0.015 |
 | *FGW on the volume of L_noreg (§7c)* | | *0.317* | *+0.014* |
 
 - The three aligners tie on every field, so the field limits them, not the aligner.

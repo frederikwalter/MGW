@@ -2,21 +2,26 @@ import pytest
 
 from mgw.bench import config, series
 
+FGW_2D, MGW_2D = "sec2sec_s-euc_f-euc_bal", "sec2sec_s-pb_f-euc_bal"
+STACK_ICP, STACK_PROCRUSTES, STACK_MGW = ("sec2nbr_s-euc_f-euc_icp", "sec2nbr_s-euc_f-euc_procrustes",
+                                          "sec2nbr_s-pb_f-euc_icp")
+FGW_VOL, MGW_VOL, FGW_PTS = "vol2vol_s-euc_f-euc_ub", "vol2vol_s-pb_f-euc_ub", "pts2pts_s-euc_f-euc_ub"
+
 
 def test_hashes_are_stable_and_overrides_change_them():
     a, b = config.load("bench.yaml"), config.load("bench.yaml")
-    assert a.pipeline_hash("A_fgw") == b.pipeline_hash("A_fgw")
+    assert a.pipeline_hash(FGW_2D) == b.pipeline_hash(FGW_2D)
     c = config.load("bench.yaml", ["reduce.max_obs=1000"])
     assert c.raw["reduce"]["max_obs"] == 1000
-    assert c.pipeline_hash("A_fgw") != a.pipeline_hash("A_fgw") and c.section_hash() != a.section_hash()
+    assert c.pipeline_hash(FGW_2D) != a.pipeline_hash(FGW_2D) and c.section_hash() != a.section_hash()
     # an FGW setting changes the pipelines but not the section cache
     e = config.load("bench.yaml", ["fgw.epsilon=1e-3"])
-    assert e.pipeline_hash("A_fgw") != a.pipeline_hash("A_fgw") and e.section_hash() == a.section_hash()
+    assert e.pipeline_hash(FGW_2D) != a.pipeline_hash(FGW_2D) and e.section_hash() == a.section_hash()
     # MGW settings: the MGW pipelines only
     m = config.load("bench.yaml", ["mgw.niter=100"])
-    assert m.pipeline_hash("A_mgw") != a.pipeline_hash("A_mgw") and m.pipeline_hash("V_mgw") != a.pipeline_hash("V_mgw")
-    assert m.pipeline_hash("S_mgw_icp") != a.pipeline_hash("S_mgw_icp")
-    for p in ("A_fgw", "V_fgw", "S_moscot_icp", "S_moscot_procrustes"):
+    assert m.pipeline_hash(MGW_2D) != a.pipeline_hash(MGW_2D) and m.pipeline_hash(MGW_VOL) != a.pipeline_hash(MGW_VOL)
+    assert m.pipeline_hash(STACK_MGW) != a.pipeline_hash(STACK_MGW)
+    for p in (FGW_2D, FGW_VOL, STACK_ICP, STACK_PROCRUSTES):
         assert m.pipeline_hash(p) == a.pipeline_hash(p)
 
 
@@ -33,10 +38,10 @@ def test_stack_coupling_names_the_stacks():
     assert len(set(hashes.values())) == 3
     b = config.load("bench.yaml", ["stack.coupling=mgw_icp"])
     assert b.stack_hash() == hashes["mgw_icp"] and b.field_hash() != a.field_hash()
-    assert b.pipeline_hash("V_fgw") != a.pipeline_hash("V_fgw")
+    assert b.pipeline_hash(FGW_VOL) != a.pipeline_hash(FGW_VOL)
     # a stack tool builds its own stack whatever stack.coupling says
-    assert b.pipeline_hash("S_moscot_icp") == a.pipeline_hash("S_moscot_icp")
-    assert b.pipeline_hash("A_fgw") == a.pipeline_hash("A_fgw")
+    assert b.pipeline_hash(STACK_ICP) == a.pipeline_hash(STACK_ICP)
+    assert b.pipeline_hash(FGW_2D) == a.pipeline_hash(FGW_2D)
     with pytest.raises(ValueError):
         config.load("bench.yaml", ["stack.coupling=paste"])
 
@@ -67,8 +72,8 @@ def test_field_hash_keeps_the_cached_fields():
     assert a.field_hash() == "5318e0cf"                      # the fields of the X4 grid winner
     assert config.load("bench.yaml", ["field.tf32=true", "field.device=cpu"]).field_hash() == a.field_hash()
     r = config.load("bench.yaml", ["field.residual=true"])
-    assert r.field_hash() != a.field_hash() and r.pipeline_hash("V_fgw") != a.pipeline_hash("V_fgw")
-    assert r.pipeline_hash("PC_fgw") == a.pipeline_hash("PC_fgw")
+    assert r.field_hash() != a.field_hash() and r.pipeline_hash(FGW_VOL) != a.pipeline_hash(FGW_VOL)
+    assert r.pipeline_hash(FGW_PTS) == a.pipeline_hash(FGW_PTS)
 
 
 def test_residual_field_net_shapes():

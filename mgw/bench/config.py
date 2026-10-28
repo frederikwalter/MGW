@@ -294,8 +294,9 @@ def from_dict(raw, path=None, overrides=()):
             raise ValueError(f"{k} must be one of {ok}")
     cfg["pipelines"] = {n: _validate_pipeline(n, s) for n, s in cfg["pipelines"].items()}
     for n in cfg["pipelines"]:
-        if "/" in n or "-" in n:
-            raise ValueError(f"pipeline name {n!r}: no '/' or '-' (the folder is <name>-<hash>)")
+        # '-' is allowed (s-euc, f-cos): the folder is <name>-<hash> and store.iter_result_dirs splits at the last '-'
+        if "/" in n:
+            raise ValueError(f"pipeline name {n!r}: no '/' (the folder is <name>-<hash>)")
     c = Config(raw=cfg, path=Path(path).resolve() if path else None, overrides=tuple(overrides or ()))
     object.__setattr__(c, "_frozen", _freeze(cfg))
     return c

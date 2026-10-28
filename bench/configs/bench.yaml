@@ -1,7 +1,9 @@
 # The cross-species alignment benchmark (bench/README.md). Two questions, one metric (kappa_bal), one figure:
-#   1. 2D <-> 2D: which tool aligns real sections best?                          A_fgw, A_mgw
-#   2. 3D <-> 3D: which tool is best within an embryo (stacking) ...            S_*
-#                 ... and between embryos (volume <-> volume), and how much better than the best 2D tool?   V_*, PC_*
+#   1. 2D <-> 2D: which tool aligns real sections best?                          sec2sec_*
+#   2. 3D <-> 3D: which tool is best within an embryo (stacking) ...            sec2nbr_*
+#                 ... and between embryos, and how much better than the best 2D tool?    vol2vol_*, pts2pts_*
+# Pipeline names: sides_space_features_marginals (docs/cross_species_alignment_results.md, "Run names"). Names do not
+# enter the hashes; the aligner and params do.
 # Run `python -m mgw.bench <command>`; any value can be overridden with `--set group.key=value` (the override enters
 # the hashes, so its results go to their own folders).
 name: bench
@@ -68,24 +70,24 @@ rfgw:
 
 pipelines:
   # ---- question 1: 2D <-> 2D (every query section x every real target section, the lowest objective selected)
-  A_fgw:
+  sec2sec_s-euc_f-euc_bal:
     strategy: real2d
     aligner: fgw             # FGW on Euclidean distances within each section
-  A_mgw:
+  sec2sec_s-pb_f-euc_bal:
     strategy: real2d
     aligner: mgw             # FGW on MGW geodesics (phi trained once per section)
   # ---- question 2a: the within-embryo coupling of neighbouring sections
-  S_moscot_icp:
+  sec2nbr_s-euc_f-euc_icp:
     strategy: stack
     params: {coupling: moscot_icp}         # moscot FGW, refined by OT-ICP (the current stage 1)
-  S_moscot_procrustes:
+  sec2nbr_s-euc_f-euc_procrustes:
     strategy: stack
     params: {coupling: moscot_procrustes}  # the same moscot FGW coupling, one Procrustes fit (what OT-ICP adds)
-  S_mgw_icp:
+  sec2nbr_s-pb_f-euc_icp:
     strategy: stack
     params: {coupling: mgw_icp}            # FGW on MGW geodesics, refined by OT-ICP
   # ---- question 2b: between embryos, 3D <-> 3D (on the stacks of stack.coupling)
-  V_fgw:
+  vol2vol_s-euc_f-euc_ub:
     strategy: volume
     aligner: fgw             # field-sampled volumes, unbalanced FGW on Euclidean distances
     params: &volume
@@ -96,15 +98,15 @@ pipelines:
       unbalanced_correction: true
       k_query: 8
       k_target: 3
-  PC_fgw:
+  pts2pts_s-euc_f-euc_ub:
     strategy: volume
     aligner: fgw             # the registered stack points (no field), slab masses, real features
     params: {<<: *volume, representation: points}
-  V_rfgw:
+  vol2vol_s-knn_f-euc_ub:
     strategy: volume
-    aligner: rfgw            # field volumes, shortest paths in a kNN graph (Riemannian FGW)
+    aligner: rfgw            # field volumes, shortest paths in a kNN graph
     params: *volume
-  V_mgw:
+  vol2vol_s-pb_f-euc_ub:
     strategy: volume
     aligner: mgw             # field volumes, geodesics under the pull-back metric of the field's features
     params: *volume
