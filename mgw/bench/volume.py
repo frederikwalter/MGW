@@ -137,10 +137,11 @@ def intra_cost(aligner, m, cfg):
     raise ValueError(f"stage 2 aligner {aligner!r}")
 
 
-def stage2(Ca, Cb, Fa, Fb, scale, p, *, a=None, b=None, tau=1.0, epsilon=None, unbalanced_correction=True):
+def stage2(Ca, Cb, Fa, Fb, scale, p, *, a=None, b=None, tau=1.0, epsilon=None, unbalanced_correction=True,
+           metric="euclidean"):
     """One unbalanced FGW coupling of two 3D measures (rows: a) with intra costs Ca, Cb; the cross cost is
-    cdist(Fa, Fb) / scale (one scale per pair). Returns (P, objective, info)."""
-    M = cdist(Fa, Fb) / scale
+    cdist(Fa, Fb, metric) / scale (one scale per pair and metric). Returns (P, objective, info)."""
+    M = cdist(Fa, Fb, metric) / scale
     P, info = solvers.fgw(None, None, M, p, Ca=Ca, Cb=Cb, epsilon=epsilon, unbalanced_correction=unbalanced_correction,
                           a=a, b=b, tau_a=tau, tau_b=tau)
     if not np.isfinite(P).all():

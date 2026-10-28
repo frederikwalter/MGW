@@ -69,13 +69,14 @@ def fgw_objective(xa, xb, M, P, alpha, Ca=None, Cb=None):
     return alpha * gw_energy(Ca, Cb, P) + (1 - alpha) * float((M * P).sum())
 
 
-def cost_scale(Fq, Ft, q=0.99, max_entries=20_000_000, seed=0):
-    """The q quantile of the feature distances between Fq and Ft, from a fixed subsample of Ft if large."""
+def cost_scale(Fq, Ft, q=0.99, max_entries=20_000_000, seed=0, metric="euclidean"):
+    """The q quantile of the feature distances (cdist metric) between Fq and Ft, from a fixed subsample of Ft if
+    large."""
     Ft = np.asarray(Ft)
     n_cols = max(1, min(len(Ft), max_entries // max(len(Fq), 1)))
     if n_cols < len(Ft):
         Ft = Ft[np.random.default_rng(seed).choice(len(Ft), n_cols, replace=False)]
-    return float(np.quantile(cdist(Fq, Ft), q))
+    return float(np.quantile(cdist(Fq, Ft, metric), q))
 
 
 # ---------- solvers
