@@ -26,8 +26,8 @@ Couplings per picked section pair (balanced marginals): W (the notebook's Wasser
   kappa_bal).
 Per organ (bin-weighted): m_o, the share of organ o's mass that lands on o.
 
-    uv run python demos/label_alignment_diagnostic.py                    # X1-X6, alphas 0.1 0.5 0.9
-    uv run python demos/label_alignment_diagnostic.py --pairs X6 --alphas 0.1
+    uv run python demos/label_alignment_diagnostic.py                    # X1-X3, X5, X8, X9, alphas 0.1 0.5 0.9
+    uv run python demos/label_alignment_diagnostic.py --pairs X8 --alphas 0.1
 
 Writes diagnostic_<stem>.csv and diagnostic_<stem>_organs.csv next to the notebook's scores
 (<root>/diag/label_alignment_best/) and prints a summary.
@@ -105,7 +105,7 @@ def measures(task, d, q, t, Pq):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--pairs", nargs="+", default=["X1", "X2", "X3", "X4", "X5", "X6"])
+    ap.add_argument("--pairs", nargs="+", default=["X1", "X2", "X3", "X5", "X8", "X9"])
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--max-obs", default="5000", help="points per section; 'none' for every bin")
     ap.add_argument("--alphas", type=float, nargs="+", default=[0.1, 0.5, 0.9])

@@ -1,8 +1,8 @@
 """Does the GW term help 3D FGW more at a higher resolution? (docs/cross_species_alignment_results.md, Caveats)
 
-    python bench/scripts/fgw_scale.py run --pair X4 [--array-index i] [--n 6000,20000,all] [--runs euc,cos]
+    python bench/scripts/fgw_scale.py run --pair X5 [--array-index i] [--n 6000,20000,all] [--runs euc,cos]
     python bench/scripts/fgw_scale.py report
-    python bench/scripts/fgw_scale.py files [--pairs X1,...,X6] > files.txt
+    python bench/scripts/fgw_scale.py files [--pairs X1,X2,X3,X5,X8,X9] > files.txt
 
 `run` solves stage 2 of pts2pts_s-euc_f-euc_ub on the stack points of one pair at several point counts n per embryo
 (`all`: every spot), each time with and without the GW term (same points, slab masses, tau and epsilon), with the
@@ -42,11 +42,11 @@ from mgw.bench.pipelines import stacked  # noqa: E402
 from mgw.bench.pipelines.common import Task  # noqa: E402
 
 PIPELINE = "pts2pts_s-euc_f-euc_ub"   # the 3D pipeline whose stacks, point clouds and settings are used
-PAIRS = "X1,X2,X3,X4,X5,X6"
+PAIRS = "X1,X2,X3,X5,X8,X9"
 INNER_TOL = 1e-5                      # as in whole_embryo_tests: the same scores as the benchmark's 1e-7, faster
 METRICS = {"euc": "euclidean", "cos": "cosine"}
 # the doc's section 3 (seed 0): kappa_bal of pts2pts_s-euc_f-euc_ub and pts2pts_s-none_f-euc_ub
-DOC_6K = {"X1": (0.351, 0.347), "X4": (0.440, 0.432), "X5": (0.435, 0.421)}
+DOC_6K = {"X1": (0.351, 0.347), "X5": (0.440, 0.432), "X9": (0.435, 0.421)}
 
 
 def log(msg):
@@ -302,7 +302,7 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=0)
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
-    r.add_argument("--pair", default="X4")
+    r.add_argument("--pair", default="X5")
     r.add_argument("--array-index", type=int, help="the i-th pair of --pairs (a SLURM array task)")
     r.add_argument("--n", default="6000,20000,all", help="points per embryo; all: every spot")
     r.add_argument("--runs", default="euc,cos", help="cross costs: euc (Euclidean), cos (cosine)")

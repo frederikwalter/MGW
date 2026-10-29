@@ -1,19 +1,19 @@
 #!/bin/bash
-# The XL fields of the field-size test (bench/scripts/field_scale.py) on LRZ: one array task per embryo of X4.
+# The XL fields of the field-size test (bench/scripts/field_scale.py) on LRZ: one array task per embryo of X5.
 #
 # Fill in the lines marked TODO (partition, time limit, environment), then:
 #   sbatch bench/scripts/lrz_field_scale.sbatch
 #
-# Before submitting, copy the caches the fields need from the NAS to $MGW_BENCH_DIR on LRZ (X4, seed 0):
+# Before submitting, copy the caches the fields need from the NAS to $MGW_BENCH_DIR on LRZ (X5, seed 0):
 #   cache/sections/{CS18_E1S1..S6,E12.5_E1S1..S5}/seed0_78dc1a8a.npz
-#   cache/features/X4/seed0_574c162c.npz
+#   cache/features/X5/seed0_574c162c.npz
 #   cache/features/stack_CS18_E1/seed0_574c162c.npz, cache/features/stack_E12.5_E1/seed0_574c162c.npz
 #   cache/stacks/CS18_E1/seed0_32574805.npz, cache/stacks/E12.5_E1/seed0_32574805.npz
-# e.g. from the NAS: rsync -avR cache/sections/CS18_E1S* cache/sections/E12.5_E1S* cache/features/X4 \
+# e.g. from the NAS: rsync -avR cache/sections/CS18_E1S* cache/sections/E12.5_E1S* cache/features/X5 \
 #   cache/features/stack_CS18_E1 cache/features/stack_E12.5_E1 cache/stacks/CS18_E1/seed0_32574805.npz \
 #   cache/stacks/E12.5_E1/seed0_32574805.npz <lrz>:<MGW_BENCH_DIR>/   (run in /nas/lnt/ga79jin/MGW/data/bench)
 # Afterwards bring the two fields back to the same paths on the NAS and score there:
-#   cache/fields/X4/{CS18_E1,E12.5_E1}/seed0_<XL field hash>_full.pt   (the hash is printed in the log)
+#   cache/fields/X5/{CS18_E1,E12.5_E1}/seed0_<XL field hash>_full.pt   (the hash is printed in the log)
 #   python bench/scripts/field_scale.py score --sizes current,L,XL
 #
 #SBATCH --job-name=mgw-field-xl

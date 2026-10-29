@@ -37,7 +37,7 @@ Discussion notes. The goal is a spot-level coupling between human (HESTA) and mo
 1. Which tool aligns real sections best in 2D?
 2. Which tools are best for the within-embryo and the between-embryo coupling in 3D, and by how much does 3D beat 2D?
 
-The gates, nulls, ceilings, guardrails and the synthetic pair are gone from the code, so §2b–§2g and §3 describe plans, not code. The first real results are on X4, seed 0 (§7).
+The gates, nulls, ceilings, guardrails and the synthetic pair are gone from the code, so §2b–§2g and §3 describe plans, not code. The first real results are on X5, seed 0 (§7).
 - The stack points beat 2D clearly (κ_bal 0.439 against 0.303).
 - The field volumes only beat 2D once the field's smoothness penalty and depth loss are relaxed (0.317).
 
@@ -84,7 +84,7 @@ It runs once as a rotation and once as a reflection, and keeps the lower cost (t
 - nothing would decide between rotation and reflection (the harness already logs FGW's implied orientation, `fgw_det`, next to OT-ICP's choice);
 - the kept couplings would be non-local. Displacement pairs would then join distant points, and the field's depth loss (§1c) would learn a wrong derivative along z.
 
-**Tested on X4 (§7b):** without OT-ICP (`stack.coupling: moscot_procrustes`: one weighted Procrustes fit on moscot's coupling), the neighbour couplings score lower on 17 of 18 neighbour pairs. Mean κ_bal drops from 0.581 to 0.530.
+**Tested on X5 (§7b):** without OT-ICP (`stack.coupling: moscot_procrustes`: one weighted Procrustes fit on moscot's coupling), the neighbour couplings score lower on 17 of 18 neighbour pairs. Mean κ_bal drops from 0.581 to 0.530.
 
 **Can MGW be used here?** Yes, as the coupling of step 2a: MGW aligns 2D sections and returns a coupling, which would start OT-ICP in place of moscot's. It still needs step 2b, because MGW gives no transform either. It is a low-priority candidate:
 - neighbouring sections of one embryo share shape and size, which is where Euclidean FGW already works; MGW's learned metric is meant for differences in proportions;
@@ -92,7 +92,7 @@ It runs once as a rotation and once as a reflection, and keeps the lower cost (t
 
 It could pay off where sections are torn or folded, since geodesics follow the tissue.
 
-**Tested on X4 (§7b):** MGW + OT-ICP (`mgw_icp`) gives the same couplings as moscot + OT-ICP, equal to within 1e-4 per neighbour pair. OT-ICP converges to the same fixed point from either start. MGW costs about 45 min per embryo instead of seconds, so moscot stays.
+**Tested on X5 (§7b):** MGW + OT-ICP (`mgw_icp`) gives the same couplings as moscot + OT-ICP, equal to within 1e-4 per neighbour pair. OT-ICP converges to the same fixed point from either start. MGW costs about 45 min per embryo instead of seconds, so moscot stays.
 
 ### 1c. Stage 1: the field
 
@@ -138,9 +138,9 @@ Both species therefore share one coordinate system. The cross cost is the Euclid
 ### 1e. Stage 2: aligning the volumes (across species)
 
 One 3D ↔ 3D solve per pair, with the cross cost from the field features:
-- **Unbalanced on both sides, with the same τ.** Depth ranges overlap only partly in most pairs (§4), and a balanced coupling would squeeze one range onto the other. Equal τ keeps the solve symmetric, so P and Pᵀ serve both directions. Example: in X4 the mouse stack has no sections between L 0.12 and 0.75, exactly where the human stack lies.
+- **Unbalanced on both sides, with the same τ.** Depth ranges overlap only partly in most pairs (§4), and a balanced coupling would squeeze one range onto the other. Equal τ keeps the solve symmetric, so P and Pᵀ serve both directions. Example: in X5 the mouse stack has no sections between L 0.12 and 0.75, exactly where the human stack lies.
 - **The z-scale.** Distances are max-normalised, so size does not matter, but the ratio of z to in-plane does. The first runs use the variogram z. A scan over a z-stretch s of one side, chosen by the objective, comes later, with its own regret check (§2e).
-- **The aligner ladder** (§5b): FGW on Euclidean distances; FGW on shortest paths in a 3D kNN graph; MGW with the pull-back metric of f. The field already is the φ that MGW would otherwise train. On X4 the three score the same on the field volume (0.288–0.290, §7d): the representation limits them, not the aligner.
+- **The aligner ladder** (§5b): FGW on Euclidean distances; FGW on shortest paths in a 3D kNN graph; MGW with the pull-back metric of f. The field already is the φ that MGW would otherwise train. On X5 the three score the same on the field volume (0.288–0.290, §7d): the representation limits them, not the aligner.
 - **The unbalanced solve.** In every 3D run so far, OTT's unbalanced correction returned NaN, and the solve was retried without it. That retry rejects 46–63 % of the mass of each side, far more than τ = 0.95 implies. This is unresolved.
 
 **Point-cloud ablation.** The same stage 2 on the raw stack points, with real features and masses proportional to each section's slab (half the gap to each neighbour). It isolates what the field adds over weighting the real points by volume.
@@ -178,13 +178,13 @@ A target sample in a gap takes the labels of the nearest real spots. This is use
 **Why this metric:** 0 is chance and 1 is perfect for any K; every organ counts equally (standard κ is dominated by large organs); there is no arg-max, so a blurred coupling loses score; and every pipeline outputs a P on real query spots.
 
 **How it ranks pipelines,** paired against the reference (A with FGW, on the same features):
-- **Δκ:** the candidate's κ_bal minus the reference's, per pair; summarised as the median over X1–X5.
+- **Δκ:** the candidate's κ_bal minus the reference's, per pair; summarised as the median over X1–X3, X5, X9.
 - **Wins:** pairs where Δκ exceeds the noise margin (2 × the SD of κ_bal over seeds on Dev).
 
 **A candidate advances** when its median Δκ > 0, it wins on ≥ 3 of 5 pairs, and it passes the guardrails:
 - *selection works:* regret ≤ 0.05 for every choice made by an objective (§2e);
 - *a plausible map:* ≤ 5 % fold-overs (points whose surface normal flips against the mean);
-- *the negative control X6* (no depth overlap): human queries land at the lateral end of the mouse embryo, mouse queries at the medial end of the human embryo.
+- *the negative control X8* (no depth overlap): human queries land at the lateral end of the mouse embryo, mouse queries at the medial end of the human embryo.
 
 For the paper, report the ceiling share κ_bal / κ_bal(ceiling) next to Δκ.
 
@@ -203,7 +203,7 @@ For the paper, report the ceiling share κ_bal / κ_bal(ceiling) next to Δκ.
 - **Smoothness:** fold-overs, local Jacobian condition number, kNN preservation.
 - **GW distortion** of P_vol.
 - **Sharpness:** effective number of partners per spot, exp(row entropy).
-- **Rejected mass** of the unbalanced solve, and where in depth. In X4 it should sit where the other embryo has no sections.
+- **Rejected mass** of the unbalanced solve, and where in depth. In X5 it should sit where the other embryo has no sections.
 
 ### 2d. Consistency (label-free)
 
@@ -260,43 +260,49 @@ Frozen in [`bench/configs/series.yaml`](../bench/configs/series.yaml). It spans 
 
 ### 4a. Cross-species pairs
 
+Every plausible human ↔ mouse stage match, numbered by stage. Renumbered on 2026-10-29: X4 → X5, X5 → X9, X6 → X8, and X4, X6, X7, X10 are new. Results from before that date use the old ids.
+
 | # | Human (sections; L range) | Mouse (sections; L range) | Stage | Depth overlap | Why it is in the set |
 | --- | --- | --- | --- | --- | --- |
 | X1 | CS12-13_E2 (8; 0.33–0.53) | E9.5_E2 (4; 0.48–0.59) | early | partial | Smallest sections (5–12k spots): the fast development pair |
 | X2 | CS14-15_E2 (10; 0.05–0.79) | E10.5_E1 (3; 0.07–0.35) | early | mouse inside human | The human stack spans midline to lateral; the only good midline anchor |
 | X3 | CS17_E1 (10; 0.47–1.00) | E11.5_E1 (4; 0.71–0.77) | mid (ambiguous window) | mouse inside human | A thin mouse volume (L range 0.06) |
-| X4 | CS18_E1 (6; 0.33–0.67) | E12.5_E1 (5; 0.10–0.81) | mid | human inside mouse, but mouse has a gap 0.12–0.75 | The development pair; the mouse volume in the gap is mostly prior |
-| X5 | CS23_E2 (8; 0.39–0.79) | E14.5_E1 (5; 0.47–0.83) | late | good | Late stage, largest sections (≈ 0.7M spots), the best depth match |
-| X6 | CS20_E2 (4; 0.27–0.76) | E13.5_E1 (4; 0.04–0.21) | late | none | Negative control: the guardrail of 2a |
+| X4 | CS17_E1 (10; 0.47–1.00) | E12.5_E1 (5; 0.10–0.81) | mid | partial (mouse gap 0.12–0.75) | The human of X3 against the next mouse stage: E11.5 or E12.5 |
+| X5 | CS18_E1 (6; 0.33–0.67) | E12.5_E1 (5; 0.10–0.81) | mid | human inside mouse, but mouse has a gap 0.12–0.75 | The development pair; the mouse volume in the gap is mostly prior |
+| X6 | CS19_E2 (4; 0.06–0.46) | E12.5_E1 (5; 0.10–0.81) | mid | partial: only E12.5_E1S3 (0.10) lies in the human range | CS19 against the earlier of its two mouse stages |
+| X7 | CS19_E2 (4; 0.06–0.46) | E13.5_E1 (4; 0.04–0.21) | late | mouse inside human (two mouse sections at 0.04, just below) | CS19 against the later of its two mouse stages |
+| X8 | CS20_E2 (4; 0.27–0.76) | E13.5_E1 (4; 0.04–0.21) | late | none | Negative control: the guardrail of 2a |
+| X9 | CS23_E2 (8; 0.39–0.79) | E14.5_E1 (5; 0.47–0.83) | late | good | Late stage, largest sections (≈ 0.7M spots), the best depth match |
+| X10 | CS23_E2 (8; 0.39–0.79) | E15.5_E1 (4; 0.32–0.83) | late | human inside mouse | The human of X9 against the next mouse stage: E14.5 or E15.5 |
 
 ### 4b. Same-species ceilings
 
 | # | Pair | Level | Matches | For |
 | --- | --- | --- | --- | --- |
-| W | Leave-one-out of every stack in X1–X6 | within embryo | all | A |
-| S | Odd/even split of the long stacks (§3, G2) | within embryo | X1–X5 | volumes |
+| W | Leave-one-out of every stack in X1–X3, X5, X8, X9 | within embryo | all | A |
+| S | Odd/even split of the long stacks (§3, G2) | within embryo | X1–X3, X5, X9 | volumes |
 | H1 | CS12-13_E1 (4) ↔ CS12-13_E2 (8) | between embryos, human | X1 | A, volumes |
 | H2 | CS14-15_E3 (4) ↔ CS14-15_E2 (10) | between embryos, human | X2 | A, volumes |
-| H3 | CS23_E1 (3) ↔ CS23_E2 (8) | between embryos, human | X5 | A, volumes |
+| H3 | CS23_E1 (3) ↔ CS23_E2 (8) | between embryos, human | X9 | A, volumes |
 | M1 | E9.5_E1S1 → E9.5_E2 | between embryos, mouse | X1 | A (one query section) |
-| M2 | E12.5_E2S1 → E12.5_E1 | between embryos, mouse | X4 | A (one query section) |
-| M3 | E14.5_E2 (2) → E14.5_E1 | between embryos, mouse | X5 | A, volumes (check the organ labels first) |
+| M2 | E12.5_E2S1 → E12.5_E1 | between embryos, mouse | X5 | A (one query section) |
+| M3 | E14.5_E2 (2) → E14.5_E1 | between embryos, mouse | X9 | A, volumes (check the organ labels first) |
 
 Optional: E16.5_E1 ↔ E16.5_E2 (5 vs 13 sections), the only mouse volume ↔ volume ceiling, with no human partner.
 
 ### 4c. Optional timing controls
 
-CS17_E1 ↔ CS18_E1 and E11.5_E1 ↔ E12.5_E1 (same species, adjacent stages). With X3 and X4 they separate timing from species. Diagnostics only.
+CS17_E1 ↔ CS18_E1 and E11.5_E1 ↔ E12.5_E1 (same species, adjacent stages). With X3 and X5 they separate timing from species. Diagnostics only.
 
 ### 4d. Tiers and compute
 
 | Tier | Pairs | Use |
 | --- | --- | --- |
-| Dev | X1, X4 (+ W and S of their embryos) | Every code change, the noise margin, the gates |
-| Screen | X1–X5 (ranked), X6 (guardrail), H1, H2, M2, W, S | Every pipeline that passes Dev |
-| Full | Screen + H3, M1, M3, timing controls | Finalists and the paper's numbers |
+| Dev | X1, X5 (+ W and S of their embryos) | Every code change, the noise margin, the gates |
+| Screen | X1–X3, X5, X9 (ranked), X8 (guardrail), H1, H2, M2, W, S | Every pipeline that passes Dev |
+| Full | Screen + X4, X6, X7, X10, H3, M1, M3, timing controls | Finalists and the paper's numbers |
 
-A needs n_q × n_t 2D solves per pair (30 for X4, about 1 h in both directions). The volume pipeline needs one field per embryo and seed (minutes on a GPU) and one 3D solve per pair and setting, so it should cost no more than A.
+A needs n_q × n_t 2D solves per pair (30 for X5, about 1 h in both directions). The volume pipeline needs one field per embryo and seed (minutes on a GPU) and one 3D solve per pair and setting, so it should cost no more than A.
 
 ---
 
@@ -309,8 +315,8 @@ A needs n_q × n_t 2D solves per pair (30 for X4, about 1 h in both directions).
 | Method | Transform | Exists | Note |
 | --- | --- | --- | --- |
 | moscot FGW + OT-ICP | rigid | `bench.stack` (current) | The baseline (§1b) |
-| FGW + one Procrustes fit | rigid | `stack.coupling: moscot_procrustes` | Ablation: what OT-ICP adds (§1b). X4: 0.530 against 0.581 |
-| MGW + OT-ICP | rigid | `stack.coupling: mgw_icp` | Learned-metric coupling (§1b). X4: same as moscot + OT-ICP |
+| FGW + one Procrustes fit | rigid | `stack.coupling: moscot_procrustes` | Ablation: what OT-ICP adds (§1b). X5: 0.530 against 0.581 |
+| MGW + OT-ICP | rigid | `stack.coupling: mgw_icp` | Learned-metric coupling (§1b). X5: same as moscot + OT-ICP |
 | PASTE2 | rigid | no | Partial FGW, for partly overlapping neighbours |
 | Spateo (morpho alignment) | non-rigid | no | Probabilistic, uses expression; builds 3D models |
 | MOSAICField | affine, then a neural deformation field | no | Designed for serial slices; preliminary code, GPU |
@@ -351,7 +357,7 @@ The harness was cut down in October 2026 to the two questions of the status note
 | Within-embryo tools | `sec2nbr_s-euc_f-euc_icp`, `sec2nbr_s-euc_f-euc_procrustes`, `sec2nbr_s-pb_f-euc_icp` |
 | Between-embryo tools | `vol2vol_s-euc_f-euc_ub`, `pts2pts_s-euc_f-euc_ub`, `vol2vol_s-knn_f-euc_ub`, `vol2vol_s-pb_f-euc_ub` |
 
-1. **All pipelines on X4, seed 0 (done, §7a–§7b, §7d).**
+1. **All pipelines on X5, seed 0 (done, §7a–§7b, §7d).**
    - 2D: FGW = MGW.
    - Within the embryo: moscot + OT-ICP is the best, and the cheapest.
    - Between the embryos: the stack points beat 2D by +0.136. The field volumes lose to 2D.
@@ -360,8 +366,8 @@ The harness was cut down in October 2026 to the two questions of the status note
    - Held-out sections for the relaxed field (L_noreg): does it still predict missing sections?
    - Smoothness and depth loss separately: which of the two sets the cap?
    - Only then XL on LRZ (`bench/scripts/lrz_field_scale.sbatch`).
-4. **Next: the unbalanced solve.** Find ε and τ at which OTT's unbalanced correction does not return NaN, and check where the rejected mass lies in X4.
-5. **Dev tier** (X1 and X4, seeds 0–2) with the chosen field, for the seed noise. Then Screen (X1–X5).
+4. **Next: the unbalanced solve.** Find ε and τ at which OTT's unbalanced correction does not return NaN, and check where the rejected mass lies in X5.
+5. **Dev tier** (X1 and X5, seeds 0–2) with the chosen field, for the seed noise. Then Screen (X1–X3, X5, X9).
 6. **Full tier:** the best stage 1 with the best stage 2. These are the benchmark numbers.
 
 ### 6a. Implementation choices for steps 2–3
@@ -371,7 +377,7 @@ First choices, recorded so results can be read against them. Details are in the 
 **Field (`field.py`).**
 - MLP on anisotropic Fourier features (64 frequencies; σ_z = 1 cycle per stack radius) plus raw coordinates; two heads (f, occupancy logit).
   - First version: width 128, depth 3, σ_xy = 4, 3000 steps.
-  - Since the grid on X4 (§7c): width 256, depth 4, σ_xy = 8, 20 000 steps. This is the best held-out R² of 12 settings, the label-free choice.
+  - Since the grid on X5 (§7c): width 256, depth 4, σ_xy = 8, 20 000 steps. This is the best held-out R² of 12 settings, the label-free choice.
   - Optional residual blocks (`field.residual`, `field.layernorm`) for deeper nets, and `field.tf32` for A100 and H100.
 - Coordinates centred and divided by the stack's in-plane RMS radius (one scale for all axes); features divided by their RMS.
 - Loss weights: features 1, depth 1, occupancy 0.5, smoothness 1e-3. Displacement pairs are sampled by mass, with equal total weight per gap.
@@ -395,12 +401,12 @@ First choices, recorded so results can be read against them. Details are in the 
 
 ---
 
-## 7. Results so far (X4, seed 0)
+## 7. Results so far (X5, seed 0)
 
-All numbers are from one pair (X4: CS18_E1 ↔ E12.5_E1) and one seed, run on tueilnt-sim14 (RTX 4080 Super), October 22–24, 2026. They carry no seed noise yet, so differences below about 0.01–0.02 should not be read. κ_bal is the mean of both directions. Reports and tables:
+All numbers are from one pair (X5: CS18_E1 ↔ E12.5_E1) and one seed, run on tueilnt-sim14 (RTX 4080 Super), October 22–24, 2026. They carry no seed noise yet, so differences below about 0.01–0.02 should not be read. κ_bal is the mean of both directions. Reports and tables:
 - `data/bench/reports/dev/` (the benchmark);
 - `data/bench/diag/field_grid_1022.csv` (the field grid);
-- `data/bench/reports/field_scale/X4_seed0.csv` (the field sizes).
+- `data/bench/reports/field_scale/X5_seed0.csv` (the field sizes).
 
 ### 7a. 2D ↔ 2D
 
@@ -471,7 +477,7 @@ Held-out R² of L_noreg is not measured yet. It decides whether the gain is real
 - Every 3D solve fell back to the unbalanced solve without OTT's correction (§1e). The rejected mass is 46–48 % (field volumes) and 70 % (stack points).
 
 **What this means so far:**
-- Aligning whole embryos in 3D pays off on X4 when the measured spots are aligned directly: +0.136 over the best 2D alignment.
+- Aligning whole embryos in 3D pays off on X5 when the measured spots are aligned directly: +0.136 over the best 2D alignment.
 - A field-sampled volume helps only once the field fits the data closely. Even then it stays well below the stack points (0.317 against 0.439).
 - Before the field approach earns its cost, it must show that it still predicts missing sections with the regularizers relaxed (§6, step 3).
 
@@ -482,9 +488,9 @@ Held-out R² of L_noreg is not measured yet. It decides whether the gain is real
 - **Beyond the outermost sections.** Extend the volume by half a gap? Is there a principled outer boundary, such as the midline for medial stacks?
 - **The z-scale.** Is a z-stretch chosen by the stage-2 objective trustworthy, or should z come from |ΔL| or metadata?
 - **The depth loss.** It and the smoothness penalty cap how well the field fits the spots (§7c). How weak can they be before the field stops predicting missing sections? Which of the two matters? Do entropic couplings or their peaks make better pairs?
-- **Evaluation in the gaps.** Is nearest-spot labelling fair to the volumes in stacks with large gaps (X4)?
+- **Evaluation in the gaps.** Is nearest-spot labelling fair to the volumes in stacks with large gaps (X5)?
 - **N and τ.** Both trade resolution and robustness to partial overlap against cost. With OTT's correction failing, the effective rejection is far above τ = 0.95 (§1e).
-- **Field or points?** On X4 the stack points beat every field volume (§7d). Does the field add anything beyond filling the gaps, and is filling them worth it?
+- **Field or points?** On X5 the stack points beat every field volume (§7d). Does the field add anything beyond filling the gaps, and is filling them worth it?
 - **Non-rigidity.** With MGW's metric and a non-rigid stage 1, when is a good κ_bal the warp's doing rather than the correspondence's?
 - **Thresholds.** Should regret 0.05, 5 % fold-overs, ≥ 3 of 5 wins and the gate thresholds be set from Dev, like the noise margin?
 - **Unit of evaluation.** Labels are noisy at boundaries and organs are not exact homologues. Is organ-level κ_bal enough?

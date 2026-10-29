@@ -13,7 +13,7 @@ The benchmark answers two questions about aligning human (HESTA) and mouse (MOST
 
 ## Pipelines
 
-All live in [`configs/bench.yaml`](configs/bench.yaml); the pairs are in [`configs/series.yaml`](configs/series.yaml) (Dev: X1, X4; Screen: X1–X5; Full: + X6).
+All live in [`configs/bench.yaml`](configs/bench.yaml); the pairs are in [`configs/series.yaml`](configs/series.yaml) (X1–X10, numbered by stage; Dev: X1, X5; Screen: X1–X3, X5, X9; Full: all ten). Before 2026-10-29 the pairs were X1–X6: old X4, X5, X6 are now X5, X9, X8, and `bench/scripts/rename_pairs.py` renames their caches and results.
 
 Names follow `sides_space_features_marginals` (the full scheme is in [`docs/cross_species_alignment_results.md`](../docs/cross_species_alignment_results.md#run-names)):
 - **sides:** `sec2sec` (2D section → every 2D target section), `sec2nbr` (2D section → its neighbour in the same embryo, stage 1), `pts2pts` (3D stack points ↔ 3D stack points), `vol2vol` (3D field volume ↔ 3D field volume).
@@ -54,7 +54,7 @@ python -m mgw.bench run --tier dev --pipelines \
 python -m mgw.bench report --tier dev
 ```
 
-- `run` takes `--pairs X4` and `--seeds 0` to narrow the run down. Finished tasks are skipped, and `--force` reruns them.
+- `run` takes `--pairs X5` and `--seeds 0` to narrow the run down. Finished tasks are skipped, and `--force` reruns them.
 - For job arrays, `plan --tier screen` writes one task per line, and `run --tasks FILE --task $SLURM_ARRAY_TASK_ID` runs one of them.
 - `run` never reads the h5ad files, so only `cache/` has to be copied to a GPU machine.
 - MGW and the fields train on CUDA when torch sees a GPU.
@@ -66,8 +66,8 @@ frequencies, 100k steps; `XL`: 1024×8 residual with LayerNorm, 512 frequencies,
 at the spots, and κ_bal of stage 2 with the field's features on the stack points and on the sampled volume.
 
 ```bash
-python bench/scripts/field_scale.py train --size L                      # both embryos of X4 (sim14: hours)
-python bench/scripts/field_scale.py score --sizes current,L,XL          # reports/field_scale/X4_seed0.csv
+python bench/scripts/field_scale.py train --size L                      # both embryos of X5 (sim14: hours)
+python bench/scripts/field_scale.py score --sizes current,L,XL          # reports/field_scale/X5_seed0.csv
 ```
 
 XL runs on LRZ as a job array (`bench/scripts/lrz_field_scale.sbatch`; its header lists the caches to copy).

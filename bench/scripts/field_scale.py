@@ -155,7 +155,7 @@ def main(argv=None):
     ap.add_argument("--config", default="bench.yaml")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="extra config overrides")
     ap.add_argument("--root", default=None, help="bench root (default $MGW_BENCH_DIR or <data>/bench)")
-    ap.add_argument("--pair", default="X4")
+    ap.add_argument("--pair", default="X5")
     ap.add_argument("--seed", type=int, default=0)
     sub = ap.add_subparsers(dest="cmd", required=True)
     t = sub.add_parser("train")

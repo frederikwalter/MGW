@@ -60,16 +60,18 @@ def test_unknown_keys_and_bad_pipelines_are_errors():
 
 def test_series_tiers_and_directions():
     s = series.load(config.load("bench.yaml").series_path())
-    assert s.tier("dev") == ["X1", "X4"] and s.tier("screen") == ["X1", "X2", "X3", "X4", "X5"]
-    x4 = s.pairs["X4"]
-    assert x4.direction_label("a_stack") == "human_stack"
-    q, t = x4.sides("a_stack")
+    assert s.tier("dev") == ["X1", "X5"] and s.tier("screen") == ["X1", "X2", "X3", "X5", "X9"]
+    assert s.tier("full") == [f"X{i}" for i in range(1, 11)]                # numbered by stage
+    x5 = s.pairs["X5"]
+    assert (x5.a.name, x5.b.name) == ("CS18_E1", "E12.5_E1")
+    assert x5.direction_label("a_stack") == "human_stack"
+    q, t = x5.sides("a_stack")
     assert q.dataset == "MOSTA" and t.dataset == "HESTA"     # human stack: mouse queries
 
 
 def test_field_hash_keeps_the_cached_fields():
     a = config.load("bench.yaml")
-    assert a.field_hash() == "5318e0cf"                      # the fields of the X4 grid winner
+    assert a.field_hash() == "5318e0cf"                      # the fields of the X5 grid winner
     assert config.load("bench.yaml", ["field.tf32=true", "field.device=cpu"]).field_hash() == a.field_hash()
     r = config.load("bench.yaml", ["field.residual=true"])
     assert r.field_hash() != a.field_hash() and r.pipeline_hash(FGW_VOL) != a.pipeline_hash(FGW_VOL)
