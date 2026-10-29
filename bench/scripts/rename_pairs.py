@@ -3,13 +3,15 @@ the cross pairs numbered by stage, X1-X10). Old X4 -> X5, X5 -> X9, X6 -> X8; X1
 
     python bench/scripts/rename_pairs.py [--root DIR]            # dry run: lists every change
     python bench/scripts/rename_pairs.py [--root DIR] --apply
+    python bench/scripts/rename_pairs.py [--root DIR] --dirs DIR [DIR ...] [--apply]   # + result folders elsewhere
 
 The caches and results are keyed by the pair id alone (no hash covers the sections), so without this the new X4
 (CS17_E1 <-> E12.5_E1) would load the old X4's (CS18_E1) features and count its results as done. Under the root:
 - cache/{features,fields,volumes}/<pair>/ and results/<pipeline>-<hash>/<pair>/;
 - the pair field of every manifest.json and the pair column of every scores.csv under results/;
 - tasks/*.jsonl: the pair field of every task;
-- diag/ and reports/: files and folders named <pair> or <pair>_..., and the pair column of every csv.
+- diag/ and reports/: files and folders named <pair> or <pair>_..., and the pair column of every csv;
+- the same for every --dirs folder (results kept outside the root, e.g. fgw_scale.py --out on LRZ).
 The ids are swapped in one pass (X5 -> X9 before X4 -> X5). Nothing is moved if a new id exists already. A run with
 --apply writes RENAMED_PAIRS.json to the root, and later runs stop there: unlike rename_pipelines.py, the old and the
 new ids overlap, so a second pass would move X5 (old X4) on to X9.
@@ -45,12 +47,15 @@ def pair_dirs(root):
     return [(p / old, p / new) for old, new in PAIRS.items() for p in parents if (p / old).is_dir()]
 
 
-def named_paths(root):
-    """(old path, new path) of the files and folders under diag/ and reports/ named after an old id, deepest first."""
-    out = [(p, p.with_name(new_name(p.name))) for sub in ("diag", "reports") for p in (root / sub).rglob("X*")
-           if NAME.match(p.name)]
+def named_paths(dirs):
+    """(old path, new path) of the files and folders under dirs named after an old id, deepest first."""
+    out = [(p, p.with_name(new_name(p.name))) for d in dirs for p in d.rglob("X*") if NAME.match(p.name)]
     order = {old: i for i, old in enumerate(PAIRS)}
     return sorted(out, key=lambda t: (-len(t[0].parts), order[NAME.match(t[0].name).group(1)]))
+
+
+def rel(p, root):
+    return p.relative_to(root) if p.is_relative_to(root) else p
 
 
 def check_free(moves):
@@ -75,17 +80,22 @@ def rewrite_csv(f, apply):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--root", default=None, help="benchmark root (default $MGW_BENCH_DIR or <data>/bench)")
+    ap.add_argument("--dirs", nargs="+", default=[], help="more folders handled like diag/ and reports/")
     ap.add_argument("--apply", action="store_true", help="make the changes (default: only list them)")
     args = ap.parse_args()
     root = prepare.bench_root(args.root)
+    dirs = [root / "diag", root / "reports"] + [Path(d).expanduser().resolve() for d in args.dirs]
+    for d in dirs[2:]:
+        if not d.is_dir():
+            raise NotADirectoryError(d)
     act = "renaming" if args.apply else "would rename"
     print(f"root {root} ({'apply' if args.apply else 'dry run'}); {', '.join(f'{o} -> {n}' for o, n in PAIRS.items())}")
     if (root / MARKER).exists():
         print(f"{MARKER} found: the pairs were renamed already ({(root / MARKER).read_text().strip()}); nothing to do")
         return
 
-    dirs, named = pair_dirs(root), named_paths(root)
-    check_free(dirs)
+    moves, named = pair_dirs(root), named_paths(dirs)
+    check_free(moves)
     check_free(named)
 
     # contents first, while the paths are still the old ones
@@ -97,11 +107,11 @@ def main():
                 m["pair"] = PAIRS[m["pair"]]
                 f.write_text(json.dumps(m, indent=1, default=str))
     csvs = sorted((root / "results").glob("*/*/seed*/scores.csv"))
-    csvs += sorted(f for sub in ("diag", "reports") for f in (root / sub).rglob("*.csv"))
+    csvs += sorted(f for d in dirs for f in d.rglob("*.csv"))
     for f in csvs:
         n = rewrite_csv(f, args.apply)
         if n:
-            print(f"{act} the pair of {n} rows in {f.relative_to(root)}")
+            print(f"{act} the pair of {n} rows in {rel(f, root)}")
     for f in sorted((root / "tasks").glob("*.jsonl")):
         lines = [json.loads(line) for line in f.read_text().splitlines() if line.strip()]
         n = sum(t.get("pair") in PAIRS for t in lines)
@@ -112,13 +122,13 @@ def main():
                     t["pair"] = PAIRS.get(t.get("pair"), t.get("pair"))
                 f.write_text("".join(json.dumps(t) + "\n" for t in lines))
 
-    for old, new in dirs + named:
-        print(f"{act} {old.relative_to(root)} -> {new.relative_to(root)}")
+    for old, new in moves + named:
+        print(f"{act} {rel(old, root)} -> {rel(new, root)}")
         if args.apply:
             old.rename(new)
 
     if args.apply:
-        (root / MARKER).write_text(json.dumps(PAIRS) + "\n")
+        (root / MARKER).write_text(json.dumps(dict(pairs=PAIRS, dirs=[str(d) for d in dirs[2:]])) + "\n")
         print(f"wrote {MARKER}")
 
 
