@@ -73,6 +73,11 @@ python bench/scripts/field_scale.py score --sizes current,L,XL          # report
 XL runs on LRZ as a job array (`bench/scripts/lrz_field_scale.sbatch`; its header lists the caches to copy).
 `field.tf32=true` speeds up A100 / H100 and enters no hash.
 
+Whether the GW term of 3D FGW helps more at higher resolution: `bench/scripts/fgw_scale.py` solves
+`pts2pts_s-euc_f-euc_ub` and the same solve without the GW term at 6000, 20 000 and all points per embryo, with
+Euclidean and cosine features. 20 000 points and more need an H100, so it runs on LRZ (via `/lrz-ai`) as a job
+array, one task per pair; `fgw_scale.py files` lists the caches to copy, `fgw_scale.py report` writes the tables.
+
 ## Output
 
 The root (`--root`, `$MGW_BENCH_DIR`, or `<MGW data dir>/bench`) holds `cache/`, `results/` and `reports/`.
