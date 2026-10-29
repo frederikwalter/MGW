@@ -77,7 +77,7 @@ The runs in this doc, with the labels they have in the notebooks' outputs (the n
 
 ## 1. In 2D, space never helps (X4)
 
-*Notebooks: [`section_cost_ablation.ipynb`](../demos/section_cost_ablation.ipynb), "Quick follow-ups" (features only, the α sweep, the GW energy); [`section_cost_ablation_run1.ipynb`](../demos/section_cost_ablation_run1.ipynb), "Solve and score" (space only, the mirror flips, labels with space).*
+*Notebooks: [`section_cost_ablation.ipynb`](../demos/section_cost_ablation.ipynb), "Quick follow-ups" (features only, the α sweep, the GW energy); [`section_cost_ablation_run1.ipynb`](../demos/section_cost_ablation_run1.ipynb), "Solve and score" (space only, the mirror flips, labels with space at α = 0.99); [`label_alignment.ipynb`](../demos/label_alignment.ipynb) (labels without and with space, at α = 0.5: X4, balanced, the partner pairs).*
 
 | run (partner sections, balanced) | κ\_bal | gene r |
 | --- | --- | --- |
@@ -93,7 +93,7 @@ The runs in this doc, with the labels they have in the notebooks' outputs (the n
 
 ## 2. In 2D, the partner section is the limit (X4)
 
-*Notebook: [`section_cost_ablation.ipynb`](../demos/section_cost_ablation.ipynb), "Quick follow-ups" and "The whole target embryo".*
+*Notebooks: [`section_cost_ablation.ipynb`](../demos/section_cost_ablation.ipynb), "Quick follow-ups" and "The whole target embryo"; [`label_alignment.ipynb`](../demos/label_alignment.ipynb) (`sec2part_s-none_f-lab_bal`).*
 
 - **The partner section caps any cost.** Even with perfect labels, `sec2part_s-none_f-lab_nn` reaches only 0.624, because organs are missing from the partner sections. Against the whole embryo, `sec2emb_s-none_f-lab_nn` reaches 0.892.
 - **The balanced marginal costs about 0.05.** With the query side balanced and the target side relaxed, features only rise from 0.295 (`sec2part_s-none_f-euc_bal`) to 0.338–0.340 (`…_semi0.9`, `…_semi0.7`). With perfect labels, balance costs 0.13 (`sec2part_s-none_f-lab_bal` 0.498 against `sec2part_s-none_f-lab_nn` 0.624).
@@ -300,4 +300,4 @@ Number of query sections in brackets.
 - [ ] **Set `fgw.inner_tol` to 1e-5 in `bench.yaml`** (still 1e-7): the same scores, 7–13 × faster.
 - [ ] **Keep the field paused** for the cross-species step.
 
-Notebooks, executed on tueilnt-sim13 unless noted: `demos/section_cost_ablation.ipynb` (2D, X4: the quick follow-ups and the features) and `demos/section_cost_ablation_run1.ipynb` (2D, X4: the full ablation loop, which the current `section_cost_ablation.ipynb` holds unexecuted); `demos/whole_embryo_tests.ipynb`. That notebook changed between rounds. The first round (X1, X4, X5, seed 0; sections 3, 5 and 6) is in commit `3044b4f` (`git show 3044b4f:demos/whole_embryo_tests.ipynb`). The six pairs and three seeds (section 4) are in commit `e7284e3`, on branch `sim/whole-embryo-all-pairs-seeds-20261027`; that version drops the tests the first round answered. `demos/depth_and_hard_pairs.ipynb` (section 7) is in commit `90b37a9`, executed on tueilnt-sim15. Its results are cached in `<root>/diag/depth_organs/`. All of these are merged into `main`.
+Notebooks, executed on tueilnt-sim13 unless noted: `demos/section_cost_ablation.ipynb` (2D, X4: the quick follow-ups and the features) and `demos/section_cost_ablation_run1.ipynb` (2D, X4: the full ablation loop, which the current `section_cost_ablation.ipynb` holds unexecuted); `demos/whole_embryo_tests.ipynb`. That notebook changed between rounds. The first round (X1, X4, X5, seed 0; sections 3, 5 and 6) is in commit `3044b4f` (`git show 3044b4f:demos/whole_embryo_tests.ipynb`). The six pairs and three seeds (section 4) are in commit `e7284e3`, on branch `sim/whole-embryo-all-pairs-seeds-20261027`; that version drops the tests the first round answered. `demos/depth_and_hard_pairs.ipynb` (section 7) is in commit `90b37a9`, executed on tueilnt-sim15. Its results are cached in `<root>/diag/depth_organs/`. All of these are merged into `main`. `demos/label_alignment.ipynb` (2D, every mouse section against every human section of one pair, organ labels as the cost without and with space, any marginals) now holds the label runs of `section_cost_ablation.ipynb`. It has not been executed yet: the label values in sections 1–2 come from the ablation runs, and its check against the doc must reproduce them on X4. Its scores are saved to `<root>/diag/label_alignment/`.
