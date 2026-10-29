@@ -1,12 +1,12 @@
 # Cross-species alignment: features, space and the target
 
-Oct 27, 2026 · updated Oct 28 (all six pairs, three seeds; depth, the hard pairs and where space helps) · @Frederik
+Oct 27, 2026 · updated Oct 29 (all six pairs, three seeds; depth, the hard pairs and where space helps; 3D FGW at higher resolution) · @Frederik
 
-**What aligns the samples best so far:** each section matched on its features against all spots of the other embryo, with cosine distance and a relaxed target marginal (`sec2emb_s-none_f-cos_semi0.7`). On all six cross pairs and three seeds, it reaches κ\_bal 0.468, against 0.402 for 3D FGW on the registered stacks (`pts2pts_s-euc_f-euc_ub`). That is 40–63 % of what perfect labels allow.
+**What aligns the samples best so far:** each section matched on its features against all spots of the other embryo, with cosine distance and a relaxed target marginal (`sec2emb_s-none_f-cos_semi0.7`). On all six cross pairs and three seeds, it reaches κ\_bal 0.468, against 0.402 for 3D FGW on the registered stacks (`pts2pts_s-euc_f-euc_ub`). That is 40–63 % of what perfect labels allow. 3D FGW only draws level when it uses every spot and cosine features: 0.467 against 0.469 on seed 0 (section 8).
 
 **What the results say about the problem:**
-- **The cross-species signal is in the features.** Space alone is at chance in 2D. In 3D, the GW term adds a small but consistent +0.013 κ\_bal, most where one embryo's volume lies inside the other's. It acts as a general regulariser there, not as a depth cue: the gain is spread over all sections and moves no mass in depth.
-- **Access to every target section matters more than the stack:** one target section caps any cost, and the stack, slab masses and joint solve add nothing measurable.
+- **The cross-species signal is in the features.** Space alone is at chance in 2D. In 3D, the GW term adds a small but consistent +0.013 κ\_bal, most where one embryo's volume lies inside the other's. It acts as a general regulariser there, not as a depth cue: the gain is spread over all sections and moves no mass in depth. More points don't change it: the gain stays at +0.015 from 6000 points to every spot (section 8).
+- **Access to every target spot matters more than the stack:** one target section caps any cost, and the stack, slab masses and joint solve add nothing measurable. Resolution helps 3D FGW three times as much as its GW term does (section 8).
 - **The early pairs are hardest** (X1, X2: about 40 % of the ceiling). Their organs are there to be found, but they are less alike between the species, even in genes the embedding never sees (r 0.51–0.57 against 0.74–0.76 on X4–X6). Within each pair, the least conserved organs fail most.
 - **κ\_bal can't see depth, and nothing places sections in depth:** X6, which has no depth overlap, scores highest of all pairs. No run sends a section's mass closer in laterality L than chance, not even the label ceiling. L itself is only a weak reference between the species.
 
@@ -18,6 +18,7 @@ Oct 27, 2026 · updated Oct 28 (all six pairs, three seeds; depth, the hard pair
 - **2D first** (X4, CS18\_E1 ↔ E12.5\_E1, seed 0). Each section is aligned with the section of the other embryo whose laterality L is closest. This removes every stage-1 uncertainty (stacking, gaps, field).
 - **Then three pairs** (X1, X4, X5, seed 0): 3D FGW on the registered stack points, taken apart one change at a time, next to feature-only matching on the whole target embryo.
 - **Then all six cross pairs** (X1–X6) **and three seeds** (0, 1, 2): the comparisons that mattered, for the seed noise and the harder pairs. X2 and X3 have the mouse inside the human, and X6 has no depth overlap.
+- **Then 3D FGW at higher resolution** (X1–X6, seed 0): 6000, 20 000 and all points per embryo, with and without the GW term, on 80–94 GB GPUs (LRZ).
 - **Two scores** per query section, both directions:
   - **κ\_bal** (0 = chance, 1 = every organ to itself);
   - **gene r**: the mean Pearson r of 500 held-out ortholog genes between each query spot and what the coupling transports to it, minus the same with the target spots shuffled. No run sees these genes.
@@ -39,7 +40,7 @@ Example: `pts2pts_s-euc_f-euc_ub` matches the 3D stack points to the 3D stack po
 | **sides** | `sec2sec` | 2D → 2D. Each query section against every real target section, one solve each; the target with the lowest objective is kept | OTT-JAX (`solvers.fgw`) |
 | | `sec2part` | 2D → 2D. Each query section against its laterality partner section only | OTT-JAX |
 | | `sec2emb` | 2D → whole embryo. Each query section against every spot of all target sections at once (no stack, no target coordinates), **one solve per query section**, uniform masses | OTT-JAX Sinkhorn |
-| | `pts2pts` | 3D ↔ 3D. The registered stack points of both embryos (stage 1): 6000 per embryo, slab masses, **one joint solve** for all sections, mapped back to the real spots by kNN. `pts2pts20k`: 20 000 points | stage 1 + OTT-JAX |
+| | `pts2pts` | 3D ↔ 3D. The registered stack points of both embryos (stage 1): 6000 per embryo, slab masses, **one joint solve** for all sections, mapped back to the real spots by kNN. `pts2pts20k`: 20 000 points; `pts2ptsall`: every spot (up to 50 000) | stage 1 + OTT-JAX |
 | | `vol2vol` | 3D ↔ 3D. The same, on volumes sampled from a neural field fitted to each stack | field (PyTorch) + OTT-JAX |
 | | `sec2nbr` | Stage 1, 2D → 2D within one embryo. Each section against its neighbour, to build the stack | moscot or MGW, then `stack3d` |
 | **space** (GW term, weight α = 0.5; 0.8 in stage 1) | `s-none` | no GW term: pure Wasserstein on the cross cost | |
@@ -71,6 +72,7 @@ The runs in this doc, with the labels they have in the notebooks' outputs (the n
 | `pts2pts_s-none_f-euc_ub` | the same solve without the GW term: same points, masses and marginals | `PC_w` |
 | `pts2pts_s-none_f-euc_semiτ` | the same with the query side balanced and the target side at τ\_b | `PC_w_semi@τ_b` |
 | `pts2pts20k_s-none_f-euc_ub` | the same on 20 000 points per embryo | `PC_w@20k` |
+| `pts2pts{,20k,all}_s-{euc,none}_f-{euc,cos}_ub` | 3D FGW and the same solve without the GW term, Euclidean or cosine features, at 6000, 20 000 or all points per embryo (section 8) | |
 | `sec2emb_s-none_f-euc_bal`, `…_semiτ`, `…_nn` | whole embryo, Euclidean features | `E_w`, `E_w_semi@τ`, `E_w_nn` |
 | `sec2emb_s-none_f-cos_semiτ`, `…_nn` | whole embryo, cosine features | `cos_w_semi@τ`, `cos_w_nn` |
 | `sec2emb_s-none_f-lab_nn` | label ceiling on the whole embryo | `E_label_nn`, `label_nn` (whole embryo) |
@@ -116,7 +118,7 @@ The runs in this doc, with the labels they have in the notebooks' outputs (the n
 | `sec2emb_s-none_f-lab_nn` (ceiling) | 0.973 | 0.892 | 0.859 | 0.908 |
 
 - **The GW term adds little:** `pts2pts_s-euc_f-euc_ub` − `pts2pts_s-none_f-euc_ub` (same points, masses and marginals; only the GW term differs) is +0.004, +0.008 and +0.014 in κ\_bal, and nothing in gene r (0.307 against 0.308). Over six pairs and three seeds the gain turns out small but consistent (section 4).
-- **Resolution matters more:** 20 000 points per embryo instead of 6000 gain +0.026 to +0.047 (`pts2pts20k_s-none_f-euc_ub`), more than the GW term on every pair.
+- **Resolution matters more:** 20 000 points per embryo instead of 6000 gain +0.026 to +0.047 (`pts2pts20k_s-none_f-euc_ub`), more than the GW term on every pair. Section 8 finds the same with the GW term, on all six pairs.
 - **The whole embryo, per section, does as well:** `sec2emb_s-none_f-euc_semi0.9` ties `pts2pts20k_s-none_f-euc_ub` (0.434 against 0.436) and is above 3D FGW on 3 of 3 pairs (+0.015 to +0.036). So the stack, the slab masses and the joint solve add nothing measurable either; resolution and access to every target section do.
 - **Relaxing the target helps, but only on the whole embryo:** from balanced (0.383) to τ\_b = 0.7 (0.448). Below 0.7 the curve is flat (0.450 at 0.5, 0.447 for `sec2emb_s-none_f-euc_nn`). On the 6000 stack points it does nothing: `pts2pts_s-none_f-euc_semi0.7` reaches 0.404 against 0.400 for `pts2pts_s-none_f-euc_ub`.
 - **The solver threshold can be loosened.** At 1e-5 instead of 1e-7, every score is unchanged (largest change 0.0000), and the solves run 7–13 × faster (`pts2pts_s-euc_f-euc_ub` 95 s → 7 s). At 1e-7, it reproduces the `mgw.bench` scores exactly.
@@ -157,7 +159,7 @@ Gene r, same averaging:
 
 **The data:**
 - **Seed noise is small.** The median SD of a score over the seeds is 0.002, the largest 0.013. The 3D runs are the noisy ones (SD up to 0.013 on X3 and 0.009 on X2), because their stack and their 6000-point sample change with the seed; the whole-embryo runs stay at or below 0.006. Paired differences are steadier still. This replaces the "0.01–0.02" guess: a paired difference of 0.01 is readable.
-- **Space carries some signal in 3D, mainly when one volume sits inside the other.** `pts2pts_s-euc_f-euc_ub` − `pts2pts_s-none_f-euc_ub` is positive in 18 of 18 cells, mean +0.013: +0.003 on X1 (within noise), +0.022 on X2, +0.015 on X3, +0.010 to +0.014 on X4–X6. Gene r does not move (0.289 for both). The gain is largest on X2 and X3, where the mouse lies inside the human, and there the whole-embryo match gains least over 3D FGW. The geometry may help to place the smaller volume within the larger one. Section 7 does not bear this out: the gain is spread over all sections and moves no mass in depth.
+- **Space carries some signal in 3D, mainly when one volume sits inside the other.** `pts2pts_s-euc_f-euc_ub` − `pts2pts_s-none_f-euc_ub` is positive in 18 of 18 cells, mean +0.013: +0.003 on X1 (within noise), +0.022 on X2, +0.015 on X3, +0.010 to +0.014 on X4–X6. Gene r does not move (0.289 for both). The gain is largest on X2 and X3, where the mouse lies inside the human, and there the whole-embryo match gains least over 3D FGW. The geometry may help to place the smaller volume within the larger one. Section 7 does not bear this out: the gain is spread over all sections and moves no mass in depth. Section 8: it does not grow at higher resolution either.
 - **The early pairs are hardest.** The whole-embryo match reaches 0.40–0.42 of the label ceiling on X1 and X2, 0.48 on X3 and 0.59–0.63 on X4–X6. Gene r agrees: 0.09–0.13 on X1 and X2, 0.40–0.57 on X4–X6. The ceilings are highest on the early pairs (0.97, 0.91), so the organs are there to be found; the features do not find them. Section 7: the early organs are also less alike between the species in their expression.
 - **κ\_bal cannot see depth.** X6 has no depth overlap, yet every feature run scores best on it (whole-embryo match 0.557, 3D FGW 0.481). κ\_bal counts organs, and most organs exist at every depth, so a section matched to the wrong depth can still score well. Whether a method places sections at a plausible depth needs its own score. Nothing in the whole-embryo match steers a section to the right depth, since it uses no coordinates.
 
@@ -268,6 +270,53 @@ Number of query sections in brackets.
 - **It does not move mass in depth.** The mass-weighted distance in L changes by at most 0.005 on every pair. The mass profiles over the target sections, with and without the GW term, nearly coincide on the slices.
 - **On the slices, the gained spots are scattered.** For each spot, the slices of X2–X4 compare the organ that the GW term transfers with the one transferred without it. The term gains 1.4–5.9 % of the scored spots and loses 0.6–5.4 %, spread over the section rather than in whole organs. Section 4 suggested that the geometry places the smaller volume within the larger one. That is not borne out: the GW term acts as a general regulariser of the coupling, stronger when one volume lies inside the other, not as a depth cue.
 
+## 8. 3D FGW at higher resolution (X1–X6, seed 0)
+
+*Script: [`bench/scripts/fgw_scale.py`](../bench/scripts/fgw_scale.py) as of commit `7fdbbda`, run on the LRZ AI Systems (one H100 or A100 per pair). The tables are also in `<root>/diag/fgw_scale/report/table.md`.*
+
+3D FGW and the same solve without the GW term, at 6000 points per embryo (the `mgw.bench` setting), 20 000 and every spot, with Euclidean and cosine features. Points, slab masses, τ and ε are those of `pts2pts_s-euc_f-euc_ub`. The cosine runs scale their cost by the 0.99 quantile of the cosine distances. Every spot means up to 50 000 × 25 000 points (X2, X3). X6's embryos have fewer than 20 000 spots each, so its `pts2ptsall` runs are its `pts2pts20k` runs. Scored as in section 4.
+
+κ\_bal, mean over the query sections of both directions:
+
+| run | X1 | X2 | X3 | X4 | X5 | X6 | mean |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `pts2pts_s-euc_f-euc_ub` (3D FGW) | 0.351 | 0.335 | 0.389 | 0.440 | 0.435 | 0.481 | 0.405 |
+| `pts2pts_s-none_f-euc_ub` | 0.346 | 0.313 | 0.371 | 0.432 | 0.421 | 0.471 | 0.392 |
+| `pts2pts_s-euc_f-cos_ub` | 0.345 | 0.343 | 0.400 | 0.466 | 0.458 | 0.498 | 0.419 |
+| `pts2pts_s-none_f-cos_ub` | 0.342 | 0.320 | 0.376 | 0.456 | 0.438 | 0.484 | 0.403 |
+| `pts2pts20k_s-euc_f-euc_ub` | 0.377 | 0.361 | 0.421 | 0.480 | 0.484 | 0.522 | 0.441 |
+| `pts2pts20k_s-none_f-euc_ub` | 0.373 | 0.335 | 0.401 | 0.469 | 0.467 | 0.512 | 0.426 |
+| `pts2pts20k_s-euc_f-cos_ub` | 0.374 | 0.366 | 0.434 | 0.509 | 0.503 | 0.538 | 0.454 |
+| `pts2pts20k_s-none_f-cos_ub` | 0.370 | 0.339 | 0.408 | 0.495 | 0.480 | 0.526 | 0.436 |
+| `pts2ptsall_s-euc_f-euc_ub` | 0.383 | 0.374 | 0.441 | 0.492 | 0.504 | 0.522 | 0.452 |
+| `pts2ptsall_s-none_f-euc_ub` | 0.378 | 0.347 | 0.421 | 0.482 | 0.486 | 0.512 | 0.438 |
+| `pts2ptsall_s-euc_f-cos_ub` | 0.379 | 0.382 | 0.454 | 0.523 | 0.525 | 0.538 | 0.467 |
+| `pts2ptsall_s-none_f-cos_ub` | 0.375 | 0.351 | 0.427 | 0.509 | 0.502 | 0.526 | 0.448 |
+| `sec2emb_s-none_f-cos_semi0.7` (whole-embryo match, seed 0) | 0.412 | 0.366 | 0.428 | 0.524 | 0.522 | 0.559 | 0.469 |
+
+The whole-embryo row is 3D FGW at 6000 points plus the seed-0 difference that section 4's notebook prints. Its seed-0 scores themselves are not stored with the doc. The 6000-point runs here reproduce those of section 4: within 0.001 in κ\_bal on X1, X4 and X5, and within 0.001 in the GW gain on all six pairs.
+
+The GW term, κ\_bal of `s-euc` − `s-none` (same points, masses and marginals):
+
+| points per embryo | features | X1 | X2 | X3 | X4 | X5 | X6 | mean | positive |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 6000 | `f-euc` | +0.004 | +0.022 | +0.018 | +0.008 | +0.014 | +0.011 | +0.013 | 6 of 6 |
+| 6000 | `f-cos` | +0.003 | +0.023 | +0.025 | +0.011 | +0.020 | +0.014 | +0.016 | 6 of 6 |
+| 20 000 | `f-euc` | +0.004 | +0.026 | +0.020 | +0.011 | +0.017 | +0.010 | +0.015 | 6 of 6 |
+| 20 000 | `f-cos` | +0.004 | +0.028 | +0.026 | +0.014 | +0.023 | +0.011 | +0.018 | 6 of 6 |
+| all | `f-euc` | +0.004 | +0.026 | +0.019 | +0.011 | +0.018 | +0.010 | +0.015 | 6 of 6 |
+| all | `f-cos` | +0.004 | +0.031 | +0.026 | +0.014 | +0.023 | +0.011 | +0.018 | 6 of 6 |
+
+- **The GW term doesn't gain from resolution.** From 6000 points to every spot, its gain goes from +0.013 to +0.015 with Euclidean features, and from +0.016 to +0.018 with cosine. It is positive on every pair at every resolution, with section 4's pattern: largest on X2 and X3 (+0.018 to +0.031), smallest on X1 (+0.003 to +0.004). It lowers gene r by at most 0.004.
+- **Resolution helps with and without the GW term, by the same amount.** From 6000 points to every spot, κ\_bal rises by +0.047 for 3D FGW and +0.046 without the GW term, three times the GW term's gain. The rise is +0.032 on X1 and up to +0.069 on X5; three quarters of it comes by 20 000 points. Gene r rises from 0.289 to 0.343.
+- **Cosine helps in 3D too, but half as much as on the whole embryo.** For 3D FGW it adds +0.014 at 6000 points and +0.015 at every spot, against +0.031 for the whole-embryo match (section 4). It is slightly negative on X1 (−0.003 to −0.006) and largest on X4 (+0.026 to +0.031). It lowers gene r by about 0.01. Cosine also changes the transported mass. The unbalanced solve rejects 35–68 % of each side's mass with cosine, against 64–80 % with Euclidean features, so part of the difference may come from the marginals rather than the distance (see Caveats).
+- **On every spot with cosine features, 3D FGW is level with the whole-embryo match.** `pts2ptsall_s-euc_f-cos_ub` reaches 0.467, against 0.469 for the whole-embryo match on the same seed.
+  - By pair, it is ahead on X2 and X3 (+0.016, +0.026), where the mouse lies inside the human, level on X4 and X5, and behind on X1 and X6 (−0.033, −0.021).
+  - Without the GW term it reaches 0.448, so the GW term is what brings it level.
+  - Its gene r is 0.331, against 0.341 for the whole-embryo match (section 4, three seeds).
+  - The whole-embryo match needs no stack and fits on a smaller GPU. The 3D run needs stage 1 and an 80 GB GPU.
+- **Cost.** The largest FGW solve took 21 s at 6000 points, 3 min at 20 000 and 8 min at every spot (X4 on an A100). A whole pair took 29–72 min with at most 72 GB of host RAM, and every solve converged. The peak GPU memory was not recorded.
+
 ## Caveats
 
 - **Every alignment here is scored on organs, not on depth.** A section matched to the wrong depth can still score well (X6 scores highest of all pairs). Section 7's depth scores use laterality L, which is derived from organ classes and agrees only loosely with organ content across species. Near-chance depth scores may reflect L as much as the methods.
@@ -275,7 +324,8 @@ Number of query sections in brackets.
 - **Three seeds.** The seed changes the tiles, the PCAs, the stack and the point sample, not the embryos; an SD from three values is a rough margin.
 - **Sections 3 and 5 rest on one seed and three pairs.** With a seed SD of about 0.002 for the whole-embryo runs, their paired differences of 0.01 or more are likely real, but the feature variants were not repeated.
 - **The 2D results rest on one pair** and few distinct section pairs: five of six human sections pair with the same mouse section.
-- **3D FGW was run in its `mgw.bench` configuration** (6000 points). FGW on 20 000 points would need distance matrices too large for the GPU, so whether the GW term helps more at higher resolution is open.
+- **Section 8 rests on seed 0 and ran on the LRZ AI Systems** (X1–X3 and X6 on H100s, X4 and X5 on A100s). Its caches were rebuilt there from the raw data. Its 6000-point runs reproduce sim13's to within 0.001, so the caches agree. Its whole-embryo row is inferred from section 4's seed-0 differences, not recomputed.
+- **Euclidean and cosine 3D runs transport different amounts of mass** (section 8: 64–80 % against 35–68 % rejected at τ = 0.95), for the reason given in the next caveat. Their κ\_bal difference mixes the distance and the marginals.
 - **The unbalanced mass above 1** seen in the first 2D ablation is not a bug: with a KL penalty on the marginals, the transported mass scales with the cost, so the same τ means different things for different costs. The `semi` runs avoid this.
 
 ## Next steps
@@ -295,9 +345,10 @@ Number of query sections in brackets.
 - [ ] **Features.** They limit every method, most of all on the early pairs (X1, X2: 0.40–0.42 of the ceiling, gene r about 0.1). Try integration across species (Harmony, scVI) and other gene sets. Part of the gap is biological (section 7: the early organs are less conserved in expression). On X1, recall follows the organs' margin in the feature space (ρ 0.92), so a better embedding should still help there.
 - [ ] **Space as an addition, where it helps.** Two tests, scored on κ\_bal and gene r, with the depth placement as a diagnostic (no depth reference yet, see above):
   - the whole-embryo match with a GW term: the query section in 2D against the target's spots in stack coordinates (`sec2emb_s-euc_f-cos_semi0.7`). GW compares distances only within each side, so 2D against 3D works;
-  - 3D FGW with cosine features (`pts2pts_s-euc_f-cos_ub` against `pts2pts_s-none_f-cos_ub`).
+  - 3D FGW with cosine features (`pts2pts_s-euc_f-cos_ub` against `pts2pts_s-none_f-cos_ub`). *Done for κ\_bal and gene r (section 8): the GW term adds +0.016 to +0.018, a little more than with Euclidean features, at every resolution. Its depth placement was not scored.*
   Together they show whether geometry adds anything once the features are as good as they currently get, and whether it places sections at the right depth.
+- [ ] **3D FGW on every spot as a second reference.** With cosine features it is level with the whole-embryo match and ahead on X2 and X3 (section 8). To keep it in `mgw.bench`, `pts2pts` needs `f-cos` and an option for every spot. It runs only on an 80 GB GPU (LRZ, `bench/scripts/fgw_scale.py`).
 - [ ] **Set `fgw.inner_tol` to 1e-5 in `bench.yaml`** (still 1e-7): the same scores, 7–13 × faster.
 - [ ] **Keep the field paused** for the cross-species step.
 
-Notebooks, executed on tueilnt-sim13 unless noted: `demos/section_cost_ablation.ipynb` (2D, X4: the quick follow-ups and the features) and `demos/section_cost_ablation_run1.ipynb` (2D, X4: the full ablation loop, which the current `section_cost_ablation.ipynb` holds unexecuted); `demos/whole_embryo_tests.ipynb`. That notebook changed between rounds. The first round (X1, X4, X5, seed 0; sections 3, 5 and 6) is in commit `3044b4f` (`git show 3044b4f:demos/whole_embryo_tests.ipynb`). The six pairs and three seeds (section 4) are in commit `e7284e3`, on branch `sim/whole-embryo-all-pairs-seeds-20261027`; that version drops the tests the first round answered. `demos/depth_and_hard_pairs.ipynb` (section 7) is in commit `90b37a9`, executed on tueilnt-sim15. Its results are cached in `<root>/diag/depth_organs/`. All of these are merged into `main`. `demos/label_alignment.ipynb` (2D, every mouse section against every human section of one pair, organ labels as the cost without and with space, any marginals) now holds the label runs of `section_cost_ablation.ipynb`. It has not been executed yet: the label values in sections 1–2 come from the ablation runs, and its check against the doc must reproduce them on X4. Its scores are saved to `<root>/diag/label_alignment/`.
+Notebooks, executed on tueilnt-sim13 unless noted: `demos/section_cost_ablation.ipynb` (2D, X4: the quick follow-ups and the features) and `demos/section_cost_ablation_run1.ipynb` (2D, X4: the full ablation loop, which the current `section_cost_ablation.ipynb` holds unexecuted); `demos/whole_embryo_tests.ipynb`. That notebook changed between rounds. The first round (X1, X4, X5, seed 0; sections 3, 5 and 6) is in commit `3044b4f` (`git show 3044b4f:demos/whole_embryo_tests.ipynb`). The six pairs and three seeds (section 4) are in commit `e7284e3`, on branch `sim/whole-embryo-all-pairs-seeds-20261027`; that version drops the tests the first round answered. `demos/depth_and_hard_pairs.ipynb` (section 7) is in commit `90b37a9`, executed on tueilnt-sim15. Its results are cached in `<root>/diag/depth_organs/`. Section 8 comes from `bench/scripts/fgw_scale.py` (commit `7fdbbda`), run on the LRZ AI Systems (array job 5884771). Its results are in `<root>/diag/fgw_scale/` and on LRZ in `$DSS/ai-runs/MGW/fgw-scale/`. All of these are merged into `main`. `demos/label_alignment.ipynb` (2D, every mouse section against every human section of one pair, organ labels as the cost without and with space, any marginals) now holds the label runs of `section_cost_ablation.ipynb`. It has not been executed yet: the label values in sections 1–2 come from the ablation runs, and its check against the doc must reproduce them on X4. Its scores are saved to `<root>/diag/label_alignment/`.
