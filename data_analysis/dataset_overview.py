@@ -7,7 +7,8 @@ of distinct labels present. Writes a CSV and prints a markdown table.
     uv run python data_analysis/dataset_overview.py --jobs 16
     uv run python data_analysis/dataset_overview.py --data-dir /nas/lnt/ga79jin/MGW/data
 
-Only obs/var and the CSR column indices are read, never the full matrix.
+Only the label column and X's CSR column indices are read (h5py, chunked),
+never the full matrix or the count layers; memory stays below ~1 GB per job.
 """
 import argparse
 import re
@@ -15,7 +16,6 @@ import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-import anndata as ad
 import h5py
 import numpy as np
 import pandas as pd
@@ -29,7 +29,7 @@ DATASETS = {
     "MOSTA": ("mosta", "*.MOSTA.h5ad", "annotation"),
 }
 NAME_RE = re.compile(r"^(?P<stage>.+?)_E(?P<embryo>\d+)S(?P<section>\d+)")
-CHUNK = 50_000_000  # nonzeros per read when scanning X/indices
+CHUNK = 20_000_000  # nonzeros per read when scanning X/indices (~0.4 GB peak per worker)
 
 
 def detected_genes(path, n_vars):
@@ -58,29 +58,53 @@ def detected_genes(path, n_vars):
         return int((counts > 0).sum())
 
 
+def _decode(values):
+    return [v.decode() if isinstance(v, bytes) else str(v) for v in values]
+
+
+def read_labels(f, key):
+    """obs[key] as a pandas Series, or None. Handles the current categorical
+    encoding (group with codes/categories) and the legacy one (codes dataset
+    plus obs/__categories/<key>, as in the MOSTA files)."""
+    obs = f["obs"]
+    if key not in obs:
+        return None
+    col = obs[key]
+    if isinstance(col, h5py.Group):  # anndata >= 0.8 categorical
+        codes, cats = col["codes"][:], _decode(col["categories"][:])
+    elif "__categories" in obs and key in obs["__categories"]:  # legacy categorical
+        codes, cats = col[:], _decode(obs["__categories"][key][:])
+    else:  # plain strings
+        return pd.Series(_decode(col[:])).replace("nan", None)
+    return pd.Series(pd.Categorical.from_codes(codes, cats))
+
+
 def summarize(args):
+    """Reads only shapes, the label column and X's indices. Never use
+    ad.read_h5ad(backed="r") here: it loads layers (full counts) into RAM."""
     dataset, path, label_key = args
-    a = ad.read_h5ad(path, backed="r")
-    try:
-        m = NAME_RE.match(path.name)
-        labels = a.obs[label_key] if label_key in a.obs else None
-        row = {
-            "dataset": dataset,
-            "slice": path.name.split(".MOSTA")[0].removesuffix(".h5ad").removesuffix("_HESTA"),
-            "file": path.name,
-            "stage": m["stage"] if m else "",
-            "embryo": int(m["embryo"]) if m else -1,
-            "section": int(m["section"]) if m else -1,
-            "n_spots": a.n_obs,
-            "n_genes_panel": a.n_vars,
-            "n_genes_detected": detected_genes(path, a.n_vars),
-            "label_key": label_key if labels is not None else "",
-            "n_labels": int(labels.dropna().nunique()) if labels is not None else 0,
-            "n_spots_labelled": int(labels.notna().sum()) if labels is not None else 0,
-            "labels": "; ".join(sorted(map(str, labels.dropna().unique()))) if labels is not None else "",
-        }
-    finally:
-        a.file.close()
+    with h5py.File(path, "r") as f:
+        X = f["X"]
+        n_obs, n_vars = (X.shape if isinstance(X, h5py.Dataset) else tuple(X.attrs["shape"]))
+        labels = read_labels(f, label_key)
+    m = NAME_RE.match(path.name)
+    row = {
+        "dataset": dataset,
+        "slice": path.name.split(".MOSTA")[0].removesuffix(".h5ad").removesuffix("_HESTA"),
+        "file": path.name,
+        "stage": m["stage"] if m else "",
+        "embryo": int(m["embryo"]) if m else -1,
+        "section": int(m["section"]) if m else -1,
+        "n_spots": int(n_obs),
+        "n_genes_panel": int(n_vars),
+        "n_genes_detected": detected_genes(path, int(n_vars)),
+        "label_key": label_key if labels is not None else "",
+        "n_labels": int(labels.dropna().nunique()) if labels is not None else 0,
+        "n_spots_labelled": int(labels.notna().sum()) if labels is not None else 0,
+        "labels": "; ".join(sorted(map(str, labels.dropna().unique()))) if labels is not None else "",
+    }
+    print(f"done {path.name}: {row['n_spots']} spots, {row['n_genes_detected']}/{n_vars} genes, "
+          f"{row['n_labels']} labels", file=sys.stderr, flush=True)
     return row
 
 
