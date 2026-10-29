@@ -2,8 +2,8 @@
 # Section lists are frozen here (resolved once from laterality/laterality_scores.csv with
 # crossspecies.embryo_sections, file order), so every run uses the same sections.
 # L ranges in the notes are L_pair (human) and raw L (mouse).
-# Pairs are numbered by stage (2026-10-29): old X4 -> X5, X5 -> X9, X6 -> X8; X4, X6, X7, X10 are new. Runs and
-# caches from before that date use the old ids (bench/scripts/rename_pairs.py moves them).
+# Pairs are numbered by stage (2026-10-29): old X4 -> X5, X5 -> X9, X6 -> X8; X4, X6, X7, X10 are new. The caches
+# and results on the NAS and LRZ were renamed then; notebook outputs from before that date show the old ids.
 
 embryos:
   # ---- human (HESTA)

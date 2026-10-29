@@ -13,7 +13,7 @@ The benchmark answers two questions about aligning human (HESTA) and mouse (MOST
 
 ## Pipelines
 
-All live in [`configs/bench.yaml`](configs/bench.yaml); the pairs are in [`configs/series.yaml`](configs/series.yaml) (X1–X10, numbered by stage; Dev: X1, X5; Screen: X1–X3, X5, X9; Full: all ten). Before 2026-10-29 the pairs were X1–X6: old X4, X5, X6 are now X5, X9, X8, and `bench/scripts/rename_pairs.py` renames their caches and results.
+All live in [`configs/bench.yaml`](configs/bench.yaml); the pairs are in [`configs/series.yaml`](configs/series.yaml) (X1–X10, numbered by stage; Dev: X1, X5; Screen: X1–X3, X5, X9; Full: all ten). Before 2026-10-29 the pairs were X1–X6: old X4, X5, X6 are now X5, X9, X8 (the caches and results on the NAS and LRZ were renamed then).
 
 Names follow `sides_space_features_marginals` (the full scheme is in [`docs/cross_species_alignment_results.md`](../docs/cross_species_alignment_results.md#run-names)):
 - **sides:** `sec2sec` (2D section → every 2D target section), `sec2nbr` (2D section → its neighbour in the same embryo, stage 1), `pts2pts` (3D stack points ↔ 3D stack points), `vol2vol` (3D field volume ↔ 3D field volume).
