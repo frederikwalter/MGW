@@ -78,6 +78,25 @@ Whether the GW term of 3D FGW helps more at higher resolution: `bench/scripts/fg
 Euclidean and cosine features. 20 000 points and more need an H100, so it runs on LRZ (via `/lrz-ai`) as a job
 array, one task per pair; `fgw_scale.py files` lists the caches to copy, `fgw_scale.py report` writes the tables.
 
+## Temporal alignment within a species (DeST-OT)
+
+`bench/scripts/temporal_align.py` couples each section of `bench/configs/chains.yaml` (chosen in
+`demos/slice_selection.ipynb`) to the next stage's section of the same species (H1–H6, M1–M6), DeST-OT style:
+semi-relaxed OT with growth, on expression (all shared genes of the species) and merged feature-spatial
+matrices (`mgw/bench/temporal.py`). It sweeps α, β, γ, ε (`temporal.sweep`) and four baselines (expression only,
+organ labels, balanced FGW, moscot), and scores every coupling: growth distortion, migration, κ_bal, gene r, and
+growth vs proliferation / apoptosis markers. `demos/temporal_alignment.ipynb` picks one global setting.
+
+```bash
+python bench/scripts/temporal_align.py prepare --seeds 0,1 --jobs 4       # data server: section + all-gene caches
+python bench/scripts/temporal_align.py sweep --seed 0                     # GPU, resumable
+python bench/scripts/temporal_align.py final --runs <from the notebook> --seeds 0,1   # dense couplings for step 2
+```
+
+Results: `<root>/diag/temporal/n<max_obs>/<norm>_<masses>-<hash>/` (`runs_seed<s>.csv`, `couplings/` as top-k,
+`final/<pair>/<run>_seed<s>.npz` dense). New cache: `cache/counts_all/` (every gene per tile, same tiles as
+`cache/sections/`).
+
 ## Output
 
 The root (`--root`, `$MGW_BENCH_DIR`, or `<MGW data dir>/bench`) holds `cache/`, `results/` and `reports/`.

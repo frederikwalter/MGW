@@ -23,6 +23,11 @@ features:
   m_scale_quantile: 0.99     # the cross cost is cdist / this quantile (one per pair)
   zscore_by: section         # genes z-scored per section (or per embryo)
 
+temporal:                    # within-species alignment across time (bench/scripts/temporal_align.py); the sweep grid,
+  chains: chains.yaml        # baselines and stage days are in mgw/bench/config.py DEFAULTS["temporal"]
+  masses: bins               # a tile weighs its bins; t2 in t1's units, so the total is the area ratio
+  norm: balanced             # every DeST-OT term O(1) like the expression cost (reference: DeST_OT's constants)
+
 fgw:
   alpha: 0.5                 # GW weight; 1 - alpha on the cross cost
   epsilon: 5.0e-3

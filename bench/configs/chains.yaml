@@ -1,0 +1,6 @@
+# The sections of the temporal (within-species) and cross-species alignments: one section per stage, in stage order.
+# Chosen in demos/slice_selection.ipynb (bench/scripts/select_sections.py): label-cost chains over the X1-X10 ladder,
+# w = 0 (no laterality term), lambda = 1, seed 0, reduce.max_obs 5000, pool all. Adjacent entries form the temporal
+# pairs of bench/scripts/temporal_align.py (H1-H6, M1-M6).
+human: [CS12-13_E2S1, CS14-15_E3S4, CS17_E1S8, CS18_E1S5, CS19_E2S1, CS20_E1S6, CS23_E2S10]
+mouse: [E9.5_E2S1, E10.5_E1S3, E11.5_E1S2, E12.5_E1S4, E13.5_E1S2, E14.5_E1S2, E15.5_E1S3]

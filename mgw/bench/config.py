@@ -11,6 +11,7 @@ Hashes name the caches and the result folders, so results of different settings 
                   only when it is not "moscot_icp" (the first caches keep their names), plus the mgw block for "mgw_icp"
 - field cache:    the stack's key + field (minus `device` and `tf32`; residual / layernorm only when set): the
                   trained weights and the sampled volumes
+- temporal:       features: reduce + temporal.features; runs: those + temporal masses, norm, solver, min_bins
 - a pipeline:     reduce + features + fgw + metrics + its spec (+ the stack it uses, + field for the volume strategy on
                   a field, + the mgw / rfgw block for those aligners)
 """
@@ -123,6 +124,59 @@ DEFAULTS = {
         "presence": "embryo",            # K: the query's organs present in the whole target embryo (or "target")
     },
     "seeds": {"smoke": [0], "dev": [0, 1, 2], "screen": [0], "full": [0]},
+    # within-species alignment across time, DeST-OT style (mgw/bench/temporal.py, bench/scripts/temporal_align.py);
+    # its feature cache hashes reduce + temporal.features, its runs reduce + features + masses + norm + solver
+    "temporal": {
+        "chains": "chains.yaml",         # one section per stage and species; adjacent ones are the pairs
+        "masses": "bins",                # bins: a tile weighs its bins, t2 in t1's units (sum = area ratio) | uniform
+        "features": {
+            "n_hvg": 2000,               # union of each section's most variable shared genes
+            "pca_comp": 30,
+            "n_eval_genes": 500,         # held out of the embedding, for gene r
+            "scale": "joint",            # joint: z-score over both sections (DeST-OT keeps temporal shifts) | section
+        },
+        "norm": "balanced",              # balanced: every term O(1) like C | reference: DeST_OT's constants
+        "solver": {                      # mgw/bench/temporal.py destot
+            "outer_maxit": 3000,         # gradient refreshes
+            "inner_steps": 5,            # Sinkhorn updates per refresh (1, with prox 0 and no annealing: the reference)
+            "inner_maxit": 5,            # ... up to this many while the row duals move > inner_tol eps (0: off)
+            "inner_tol": 0.0,
+            "tol": 5.0e-5,               # sum |P_k - P_k-1| / sum P_k at the final eps (float32 noise is ~1e-5)
+            "prox": 0.04,                # + prox KL(P | P_k), cost units (C has mean 1): mirror descent, finite step
+            "prox_max": 1.0,             # prox doubles up to this when the change in P stalls ...
+            "patience": 100,             # ... for this many refreshes
+            "eps0": 0.05,                # entropy annealed from eps0 down to epsilon ...
+            "anneal": 100,               # ... over this many refreshes (DeST-OT terms only; 0: off)
+        },
+        "sweep": {                       # DeST-OT: the grid, plus extra points
+            "alpha": [0.1, 0.2, 0.4, 0.6, 0.8, 0.99],
+            "beta": [0.0, 0.5, 1.0],
+            # with C at mean 1, growth appears at gamma <~ 1-3; the paper's gamma = 50 is nearly balanced
+            "gamma": [0.1, 0.3, 1.0, 3.0, 10.0],
+            "epsilon": [0.01],
+            "extra": [
+                {"alpha": 0.2, "beta": 0.5, "gamma": 50.0, "epsilon": 0.01},    # the paper's default
+                {"alpha": 0.2, "beta": 0.5, "gamma": 1.0, "epsilon": 0.003},
+                {"alpha": 0.2, "beta": 0.5, "gamma": 1.0, "epsilon": 0.03},
+                {"alpha": 0.99, "beta": 0.5, "gamma": 1.0, "epsilon": 0.003},   # the paper's cut-off-robust setting
+                {"alpha": 0.99, "beta": 0.5, "gamma": 1.0, "epsilon": 0.03},
+            ],
+        },
+        "baselines": {
+            "expr": {"gamma": [0.1, 0.3, 1.0, 3.0, 10.0], "epsilon": [0.01]},      # DeST-OT with alpha = 0
+            "label": {"gamma": [0.1, 0.3, 1.0, 3.0, 10.0], "epsilon": [0.01]},     # organ-label cost, semi-relaxed
+            "fgw_bal": {"alpha": [0.3, 0.5, 0.8], "epsilon": 5.0e-3},              # balanced FGW (PASTE-like)
+            "moscot": {"alpha": [0.2, 0.5, 0.8], "epsilon": 1.0e-2, "tau_a": 0.99, "tau_b": 0.999},
+        },
+        "topk": 32,                      # sweep couplings are stored as each t2 tile's top-k ancestors
+        "min_bins": 5,                   # an organ is present with >= 5 bins
+        # stage -> days (mouse: E-days; human: post-conception days, O'Rahilly & Muller), for growth rates only
+        "stage_days": {
+            "CS12-13": 29.0, "CS14-15": 34.0, "CS17": 41.0, "CS18": 44.0, "CS19": 48.0, "CS20": 51.0, "CS23": 57.0,
+            "E9.5": 9.5, "E10.5": 10.5, "E11.5": 11.5, "E12.5": 12.5, "E13.5": 13.5, "E14.5": 14.5,
+            "E15.5": 15.5, "E16.5": 16.5,
+        },
+    },
 }
 
 PIPELINE_DEFAULTS = {
@@ -257,6 +311,25 @@ class Config:
     def field_hash(self):
         return short_hash(self.field_key())
 
+    def temporal_feature_key(self):
+        return dict(reduce=self.raw["reduce"], temporal_features=self.raw["temporal"]["features"])
+
+    def temporal_feature_hash(self):
+        return short_hash(self.temporal_feature_key())
+
+    def temporal_key(self):
+        """What a temporal run's numbers depend on besides its own params: features, masses, norm, solver."""
+        t = self.raw["temporal"]
+        return dict(**self.temporal_feature_key(), masses=t["masses"], norm=t["norm"], solver=t["solver"],
+                    min_bins=t["min_bins"])
+
+    def temporal_hash(self):
+        return short_hash(self.temporal_key())
+
+    def chains_path(self):
+        p = Path(self.raw["temporal"]["chains"])
+        return p if p.is_absolute() else (self.path.parent if self.path else CONFIG_DIR) / p
+
     def pipeline_key(self, name):
         spec = self.raw["pipelines"][name]
         key = dict(**self.feature_key(), fgw=self.raw["fgw"], metrics=self.raw["metrics"],
@@ -289,7 +362,10 @@ def from_dict(raw, path=None, overrides=()):
     for k, v, ok in (("features.zscore_by", cfg["features"]["zscore_by"], ("section", "embryo")),
                      ("metrics.presence", cfg["metrics"]["presence"], ("embryo", "target")),
                      ("field.device", cfg["field"]["device"], ("auto", "cpu", "cuda")),
-                     ("stack.coupling", cfg["stack"]["coupling"], COUPLINGS)):
+                     ("stack.coupling", cfg["stack"]["coupling"], COUPLINGS),
+                     ("temporal.masses", cfg["temporal"]["masses"], ("bins", "uniform")),
+                     ("temporal.norm", cfg["temporal"]["norm"], ("balanced", "reference")),
+                     ("temporal.features.scale", cfg["temporal"]["features"]["scale"], ("joint", "section"))):
         if v not in ok:
             raise ValueError(f"{k} must be one of {ok}")
     cfg["pipelines"] = {n: _validate_pipeline(n, s) for n, s in cfg["pipelines"].items()}

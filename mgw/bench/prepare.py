@@ -67,6 +67,10 @@ def counts_file(root, sec, seed, h):
     return Path(root) / "cache" / "counts" / sec / f"seed{seed}_{h}.npz"
 
 
+def counts_all_file(root, sec, seed, h):
+    return Path(root) / "cache" / "counts_all" / sec / f"seed{seed}_{h}.npz"
+
+
 def feature_file(root, key, seed, h):
     return Path(root) / "cache" / "features" / key.replace(":", "_") / f"seed{seed}_{h}.npz"
 
@@ -108,6 +112,73 @@ def prepare_section(dataset, sec, cfg, seed, root, ortho, scores, force=False):
     del red, full
     gc.collect()
     return out
+
+
+def bin_pitch(xy, n=20000, seed=0):
+    """Median nearest-neighbour distance of the full-resolution bins (a subsample), in coordinate units."""
+    from scipy.spatial import cKDTree
+    xy = np.asarray(xy, dtype=np.float64)
+    q = xy[np.random.default_rng(seed).choice(len(xy), min(n, len(xy)), replace=False)]
+    return float(np.median(cKDTree(xy).query(q, k=2)[0][:, 1]))
+
+
+def prepare_counts_all(dataset, sec, cfg, seed, root, ortho, scores, force=False):
+    """Every gene's summed counts per tile (cache/counts_all), for features within a species, and the section cache
+    if missing. The reduction is prepare_section's (same arguments, Voronoi seed 42 + seed), so the tiles are the
+    same; an existing section cache is checked against it. Returns the counts file."""
+    h = cfg.section_hash()
+    out, sec_file = counts_all_file(root, sec, seed, h), section_file(root, sec, seed, h)
+    if out.exists() and sec_file.exists() and not force:
+        return out
+    r = cfg.raw["reduce"]
+    hesta, mosta = data_dirs()
+    red, full = cs.load_section(dataset, sec, cs.section_path(dataset, sec, hesta, mosta), max_obs=r["max_obs"],
+                                subsample=r["subsample"], agg=r["agg"], lloyd_iter=r["lloyd_iter"],
+                                drop_labels=r["drop_labels"], random_state=42 + seed)
+    xy = np.asarray(red.obsm["spatial"], dtype=np.float64)
+    if sec_file.exists():
+        cached = np.load(sec_file, allow_pickle=False)["xy"]
+        if cached.shape != xy.shape or not np.allclose(cached, xy):
+            raise RuntimeError(f"{sec} seed {seed}: the reduction differs from the cached section {sec_file}")
+    else:
+        n = red.n_obs
+        comp = metrics.composition(full.obs["label_h"].to_numpy(str), full.obs["tile"].to_numpy(), n)
+        L_pair, L_raw = lat(scores, dataset, sec)
+        atomic_savez(sec_file, xy=xy, label=red.obs["label_h"].to_numpy(str), comp=comp.astype(np.float32),
+                     n_bins=red.obs["n_bins"].to_numpy(np.int64), purity=red.obs["purity"].to_numpy(np.float32),
+                     L_pair=L_pair, L_raw=L_raw, n_full=full.n_obs, identity=bool(n == full.n_obs),
+                     organs=np.asarray(metrics.ORGANS), dataset=dataset, section=sec)
+    if not counts_file(root, sec, seed, h).exists():
+        col = "human" if dataset == "HESTA" else "mouse"
+        genes = red.var_names.intersection(pd.Index(ortho[col]))
+        X = sp.csr_matrix(red[:, genes].X, dtype=np.float32)
+        atomic_savez(counts_file(root, sec, seed, h), data=X.data, indices=X.indices, indptr=X.indptr,
+                     shape=np.asarray(X.shape), genes=np.asarray(genes, dtype=str),
+                     total=np.asarray(red.X.sum(1)).ravel())
+    X = sp.csr_matrix(red.X, dtype=np.float32)
+    keep = np.asarray((X != 0).sum(0)).ravel() > 0                       # genes seen in this section
+    X = X[:, keep].tocsr()
+    atomic_savez(out, data=X.data, indices=X.indices, indptr=X.indptr, shape=np.asarray(X.shape),
+                 genes=np.asarray(red.var_names[keep], dtype=str), total=np.asarray(red.X.sum(1)).ravel(),
+                 bin_pitch=bin_pitch(full.obsm["spatial"]), dataset=dataset, section=sec)
+    del red, full
+    gc.collect()
+    return out
+
+
+def load_counts_all(root, sec, seed, h):
+    """Every gene of the section per tile, log-normalized with its total counts (normalize_total + log1p), and the
+    bin pitch."""
+    z = np.load(counts_all_file(root, sec, seed, h), allow_pickle=False)
+    X = sp.csr_matrix((z["data"], z["indices"], z["indptr"]), shape=tuple(z["shape"]))
+    total = z["total"]
+    target = np.median(total[total > 0])
+    X = (sp.diags(target / np.where(total > 0, total, 1)) @ X).tocsr()
+    X.data = np.log1p(X.data)
+    a = ad.AnnData(X.astype(np.float32), var=pd.DataFrame(index=z["genes"].astype(str)))
+    a.obs_names = [f"{sec}_{i}" for i in range(a.n_obs)]
+    a.uns["bin_pitch"] = float(z["bin_pitch"])
+    return a
 
 
 @dataclass
