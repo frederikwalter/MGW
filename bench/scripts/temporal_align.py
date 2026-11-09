@@ -11,12 +11,12 @@ The pairs are the adjacent sections of bench/configs/chains.yaml (temporal.chain
 counts per tile (cache/counts_all); then per pair the shared expression embedding (all shared genes, not just the
 orthologs), the held-out genes and the proliferation / apoptosis scores; and writes pairs.csv and view_seed<s>.npz (sweep and final write them too when missing).
 `sweep` solves the DeST-OT grid and the baselines (temporal.sweep, temporal.baselines; --methods narrows them) and
-scores every coupling: one row per pair and run in runs_seed<s>.csv, written after every solve, so a rerun skips what
-is done (--force starts over). Each coupling is kept as its columns' top-k (temporal.topk) with xi, J and the organ
+scores every coupling: one row per run in runs/seed<s>/<pair>.csv (one table per pair, so a job array can run one
+pair per task), written after every solve, so a rerun skips what is done (--force starts over). Each coupling is kept as its columns' top-k (temporal.topk) with xi, J and the organ
 coupling in couplings/<pair>/<run>_seed<s>.npz.
 `final` solves the chosen runs (names as in runs.csv) on every pair and seed and keeps the dense couplings:
 final/<pair>/<run>_seed<s>.npz (P float32, xi, J, g1, g2, coordinates, organs), the hand-off to the cross-species
-step; their scores in final_runs.csv.
+step; their scores in final/<pair>/runs_seed<s>.csv.
 
 Everything goes to <out>/n<max_obs>/<norm>_<masses>-<hash> (default <root>/diag/temporal; the hash covers the
 temporal features, masses, norm and solver); demos/temporal_alignment.ipynb reads only that.
@@ -70,6 +70,7 @@ def context(args):
 
 
 def save_csv(df, path):
+    path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + f".tmp{os.getpid()}")
     df.to_csv(tmp, index=False)
     os.replace(tmp, path)
@@ -112,12 +113,21 @@ def cmd_prepare(args):
 def describe(cfg, root, out, pairs, seed, build=False, force=False):
     """The pair table (pairs.csv, rows of this seed replaced) and the viewer's sections (view_seed<s>.npz): written by
     prepare (build: the pair features too) and, when missing for the seed, by sweep and final, since a results folder
-    is per solver setting."""
+    is per solver setting. Held under a file lock, so the tasks of a job array don't overwrite each other."""
+    import fcntl
+    with open(out / ".describe.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        _describe(cfg, root, out, pairs, seed, build, force)
+
+
+def _describe(cfg, root, out, pairs, seed, build, force):
     path = out / "pairs.csv"
     old = pd.read_csv(path) if path.exists() else pd.DataFrame(columns=["seed", "pair"])
-    if not build and (out / f"view_seed{seed}.npz").exists() and set(p.id for p in pairs) <= set(old.pair[old.seed == seed]):
+    view_path = out / f"view_seed{seed}.npz"
+    if not build and view_path.exists() and set(p.id for p in pairs) <= set(old.pair[old.seed == seed]):
         return
-    rows, view = [], {}
+    rows = []
+    view = dict(np.load(view_path, allow_pickle=False)) if view_path.exists() else {}
     for p in pairs:
         t0 = time.perf_counter()
         if build:
@@ -130,17 +140,18 @@ def describe(cfg, root, out, pairs, seed, build=False, force=False):
                          pitch_a=d.pitch[0], pitch_b=d.pitch[1], n_shared_genes=d.n_shared,
                          seconds=time.perf_counter() - t0))
         for side, s, sec in (("a", p.a, d.sa), ("b", p.b, d.sb)):
-            view.setdefault(f"{s}|xy", sec.xy.astype(np.float32))
-            view.setdefault(f"{s}|organ", metrics.organ_codes(sec.label).astype(np.uint8))
-            view.setdefault(f"{s}|n_bins", sec.comp.sum(1).astype(np.float32))
+            view[f"{s}|xy"] = sec.xy.astype(np.float32)
+            view[f"{s}|organ"] = metrics.organ_codes(sec.label).astype(np.uint8)
+            view[f"{s}|n_bins"] = sec.comp.sum(1).astype(np.float32)
             for k in ("prolif", "apopt"):
-                view.setdefault(f"{s}|{k}", d.scores[f"{k}_{side}"].astype(np.float32))
+                view[f"{s}|{k}"] = d.scores[f"{k}_{side}"].astype(np.float32)
         log(f"  {p.id} {p.a} -> {p.b} seed {seed}: {d.sa.n} x {d.sb.n} tiles, area ratio {g2.sum():.2f}, "
             f"{d.n_shared} shared genes")
     new = pd.DataFrame(rows)
     keep = old[~((old.seed == seed) & old.pair.isin(new.pair))]
     save_csv(pd.concat([keep, new], ignore_index=True) if len(keep) else new, path)
-    prepare.atomic_savez(out / f"view_seed{seed}.npz", organs=np.asarray(metrics.ORGANS), **view)
+    view["organs"] = np.asarray(metrics.ORGANS)
+    prepare.atomic_savez(view_path, **view)
 
 
 # ---------- sweep and final
@@ -174,18 +185,19 @@ def cmd_sweep(args):
         raise SystemExit(f"unknown methods {sorted(bad)}; known {tp.METHODS}")
     runs = tp.grid(cfg, methods)
     describe(cfg, root, out, pairs, args.seed)
-    path = out / f"runs_seed{args.seed}.csv"
-    table = pd.read_csv(path) if path.exists() and not args.force else pd.DataFrame()
-    done = set() if table.empty else set(zip(table.pair, table.run))
-    rows = table.to_dict("records")
     k = cfg.raw["temporal"]["topk"]
     total = len(pairs) * len(runs)
-    log(f"sweep seed {args.seed}: {len(pairs)} pairs x {len(runs)} runs ({', '.join(methods)}), "
-        f"{len(done & {(p.id, tp.run_name(m, q)) for p in pairs for m, q in runs})} done -> {path}")
+    log(f"sweep seed {args.seed}: {len(pairs)} pairs x {len(runs)} runs ({', '.join(methods)}) -> "
+        f"{tp.runs_dir(out, args.seed)}")
     n = 0
     for p in pairs:
-        todo = [(m, q) for m, q in runs if (p.id, tp.run_name(m, q)) not in done]
+        path = tp.runs_dir(out, args.seed) / f"{p.id}.csv"      # one table per pair: array tasks never share a file
+        table = pd.read_csv(path) if path.exists() and not args.force else pd.DataFrame()
+        done = set() if table.empty else set(table.run)
+        rows = table.to_dict("records")
+        todo = [(m, q) for m, q in runs if tp.run_name(m, q) not in done]
         n += len(runs) - len(todo)
+        log(f"  {p.id}: {len(runs) - len(todo)} of {len(runs)} runs done")
         if not todo:
             continue
         prob = tp.Problem(tp.load_pair(p, cfg, args.seed, root), cfg)
@@ -204,21 +216,21 @@ def cmd_sweep(args):
                                    f"kappa {row['kappa_ba']:.3f}, gene r {row.get('gene_r', np.nan):.3f}, "
                                    f"{'conv' if row['converged'] else 'NOT conv'} ({row['n_outer']})")
             log(f"  [{n}/{total}] {p.id} {row['run']}: {msg}; {row['seconds_total']:.1f} s")
-    log(f"sweep done -> {path}")
+    log(f"sweep done -> {tp.runs_dir(out, args.seed)}")
 
 
 def cmd_final(args):
     cfg, root, out, pairs = context(args)
     seeds = [int(s) for s in args.seeds.split(",")]
     runs = [tp.parse_run(r.strip()) for r in args.runs.split(",") if r.strip()]
-    path = out / "final_runs.csv"
-    table = pd.read_csv(path) if path.exists() else pd.DataFrame()
-    rows = [] if table.empty else table.to_dict("records")
-    done = set() if table.empty else set(zip(table.seed, table.pair, table.run))
     for sd in seeds:
         describe(cfg, root, out, pairs, sd)
         for p in pairs:
-            todo = [(m, q) for m, q in runs if (sd, p.id, tp.run_name(m, q)) not in done or args.force]
+            path = out / "final" / p.id / f"runs_seed{sd}.csv"      # one table per pair and seed
+            table = pd.read_csv(path) if path.exists() else pd.DataFrame()
+            rows = [] if table.empty else table.to_dict("records")
+            done = set() if table.empty else set(table.run)
+            todo = [(m, q) for m, q in runs if tp.run_name(m, q) not in done or args.force]
             if not todo:
                 continue
             prob = tp.Problem(tp.load_pair(p, cfg, sd, root), cfg)
@@ -234,7 +246,7 @@ def cmd_final(args):
                                          comp_a=d.sa.comp.astype(np.float32), comp_b=d.sb.comp.astype(np.float32),
                                          organs=np.asarray(metrics.ORGANS), a=p.a, b=p.b, dt=p.dt, method=m,
                                          params=json.dumps(q), **extra)
-                rows = [r for r in rows if (r["seed"], r["pair"], r["run"]) != (sd, p.id, row["run"])] + [row]
+                rows = [r for r in rows if r["run"] != row["run"]] + [row]
                 save_csv(pd.DataFrame(rows), path)
                 msg = row["error"] or (f"growth dist {row['growth_dist_nt']:.3g}, mig {row['migration']:.3f}, "
                                        f"kappa {row['kappa_ba']:.3f}")

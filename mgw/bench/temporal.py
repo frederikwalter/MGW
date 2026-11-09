@@ -107,15 +107,15 @@ def chain_pairs(chains, stage_days):
 
 
 def parse_pairs(spec, stage_days, known=()):
-    """--pairs: pair ids of the chain (H2,M1) and/or explicit a:b section pairs (ids P1, P2, ...)."""
+    """--pairs: pair ids of the chain (H2,M1) and/or explicit a:b section pairs (id a__b, the same in every task)."""
     known = {p.id: p for p in known}
     out = []
-    for k, tok in enumerate(t.strip() for t in spec.split(",") if t.strip()):
+    for tok in (t.strip() for t in spec.split(",") if t.strip()):
         if tok in known:
             out.append(known[tok])
         elif ":" in tok:
             a, b = tok.split(":")
-            out.append(make_pair(f"P{k + 1}", a, b, stage_days))
+            out.append(make_pair(f"{a}__{b}", a, b, stage_days))
         else:
             raise ValueError(f"unknown pair {tok!r} (ids: {sorted(known)}; or a:b)")
     return out
@@ -604,6 +604,25 @@ def evaluate(P, prob: Problem, seed=0, genes=True):
     if genes:
         row["gene_r"] = selection.gene_r(P, d.Ya, d.Yb, seed=seed)
     return row, dict(xi=xi.astype(np.float32), J=J.astype(np.float32), T_org=T_org.astype(np.float32))
+
+
+# ---------- result tables (bench/scripts/temporal_align.py)
+def runs_dir(out, seed):
+    from pathlib import Path
+    return Path(out) / "runs" / f"seed{seed}"
+
+
+def load_runs(out, seed):
+    """All sweep rows of a seed (one table per pair), one frame."""
+    files = sorted(runs_dir(out, seed).glob("*.csv"))
+    return pd.concat([pd.read_csv(f) for f in files], ignore_index=True) if files else pd.DataFrame()
+
+
+def load_final(out):
+    """All final rows (one table per pair and seed), one frame, or None."""
+    from pathlib import Path
+    files = sorted((Path(out) / "final").glob("*/runs_seed*.csv"))
+    return pd.concat([pd.read_csv(f) for f in files], ignore_index=True) if files else None
 
 
 def topk_columns(P, k):

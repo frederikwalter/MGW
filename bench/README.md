@@ -93,7 +93,7 @@ python bench/scripts/temporal_align.py sweep --seed 0                     # GPU,
 python bench/scripts/temporal_align.py final --runs <from the notebook> --seeds 0,1   # dense couplings for step 2
 ```
 
-Results: `<root>/diag/temporal/n<max_obs>/<norm>_<masses>-<hash>/` (`runs_seed<s>.csv`, `couplings/` as top-k,
+Results: `<root>/diag/temporal/n<max_obs>/<norm>_<masses>-<hash>/` (`runs/seed<s>/<pair>.csv`, `couplings/` as top-k,
 `final/<pair>/<run>_seed<s>.npz` dense). New cache: `cache/counts_all/` (every gene per tile, same tiles as
 `cache/sections/`).
 
