@@ -28,6 +28,9 @@ temporal:                    # within-species alignment across time (bench/scrip
   masses: bins               # a tile weighs its bins; t2 in t1's units, so the total is the area ratio
   norm: balanced             # every DeST-OT term O(1) like the expression cost (reference: DeST_OT's constants)
 
+cross:                       # cross-species alignment of the chain sections, scored by commutativity with the temporal
+  temporal_dir: balanced_bins-6672dd86   # couplings (bench/scripts/cross_align.py); grids in mgw/bench/config.py
+
 fgw:
   alpha: 0.5                 # GW weight; 1 - alpha on the cross cost
   epsilon: 5.0e-3

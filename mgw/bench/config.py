@@ -12,6 +12,8 @@ Hashes name the caches and the result folders, so results of different settings 
 - field cache:    the stack's key + field (minus `device` and `tf32`; residual / layernorm only when set): the
                   trained weights and the sampled volumes
 - temporal:       features: reduce + temporal.features; runs: those + temporal masses, norm, solver, min_bins
+- cross:          features: reduce + features (feature_hash); runs: those + fgw tolerances + cross (minus grids) +
+                  the temporal folder
 - a pipeline:     reduce + features + fgw + metrics + its spec (+ the stack it uses, + field for the volume strategy on
                   a field, + the mgw / rfgw block for those aligners)
 """
@@ -177,6 +179,30 @@ DEFAULTS = {
             "E15.5": 15.5, "E16.5": 16.5,
         },
     },
+    # cross-species alignment of the chain sections, scored by commutativity with the temporal couplings
+    # (mgw/bench/crossloop.py, bench/scripts/cross_align.py); features are the bench's (`features`), the solver
+    # tolerances fgw's; runs hash reduce + features + fgw tolerances + these settings (not the grids) + the temporal
+    # folder they compose with
+    "cross": {
+        "temporal_dir": None,            # temporal results folder (name under <root>/diag/temporal/n<max_obs>, or a
+                                         # path); None: the one whose final couplings were written last
+        "epsilon": 5.0e-3,               # every FGW / OT solve (moscot: moscot_epsilon)
+        "wot_tol": 1.0e-5,               # linear OT (alpha = 0): Sinkhorn tolerance, float32
+        "wot_maxit": 20000,
+        "moscot_epsilon": 1.0e-2,
+        "drop_floor": 1.0e-3,            # a kernel row below this x the mean row mass carries no information
+        "min_bins": 5,                   # an organ is present with >= 5 bins
+        "sweep": {
+            "alpha": [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0],    # GW weight: 0 linear OT on orthologs, 1 GW on space
+            # unbalanced: KL weight rho on both marginals, in cost units (the cross cost is ~1), so it means the same
+            # at every epsilon; OTT's tau = rho / (rho + epsilon). Mass is destroyed where moving it costs > ~rho
+            "rho": [3.0, 1.0, 0.3, 0.1],
+            "label_fgw_alpha": [0.3, 0.5, 0.7],              # references on the organ-label cost
+            "moscot_alpha": [0.5, 0.8],
+        },
+        "topk": 32,                      # sweep couplings: each mouse tile's top-k human tiles
+        "view_k": 48,                    # viewer: each start tile's top-k per kernel
+    },
 }
 
 PIPELINE_DEFAULTS = {
@@ -325,6 +351,15 @@ class Config:
 
     def temporal_hash(self):
         return short_hash(self.temporal_key())
+
+    def cross_key(self, temporal_name):
+        """What a cross run's numbers depend on besides its own params (grids, top-k and view size excluded)."""
+        c = {k: v for k, v in self.raw["cross"].items() if k not in ("temporal_dir", "sweep", "topk", "view_k")}
+        fg = {k: v for k, v in self.raw["fgw"].items() if k not in ("alpha", "epsilon")}
+        return dict(**self.feature_key(), fgw=fg, cross=c, temporal=str(temporal_name))
+
+    def cross_hash(self, temporal_name):
+        return short_hash(self.cross_key(temporal_name))
 
     def chains_path(self):
         p = Path(self.raw["temporal"]["chains"])

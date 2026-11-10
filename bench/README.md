@@ -97,6 +97,41 @@ Results: `<root>/diag/temporal/n<max_obs>/<norm>_<masses>-<hash>/` (`runs/seed<s
 `final/<pair>/<run>_seed<s>.npz` dense). New cache: `cache/counts_all/` (every gene per tile, same tiles as
 `cache/sections/`).
 
+## Cross-species alignment, scored by commutativity
+
+`bench/scripts/cross_align.py` aligns the human and mouse chain sections of each cross pair X1–X10 (`series.yaml`)
+and scores each alignment by how well it commutes with the temporal couplings (`mgw/bench/crossloop.py`).
+
+**Loops:** the rung pairs where each species advances at most one stage. That gives 6 squares and 6 triangles; a triangle uses the identity for the species that stays.
+
+**Score:** from a tile of species A's earlier section, path 1 goes forward in time within A and then across, and path 2 goes across and then forward in time within B. `comm` is the energy distance between the two resulting distributions over B's later section, in its RMS radii. `sharp` is each path's distance from the uninformative map, which guards against diffuse maps that commute trivially.
+
+**Methods:**
+- ortholog FGW with α from 0 (linear OT) to 1 (GW on space only), balanced and unbalanced (KL weight ρ in cost units)
+- moscot
+- organ-label references
+
+The temporal couplings are the dense `final` ones in `cross.temporal_dir`. Every temporal run found there is composed, so the same score also chooses the temporal setting.
+
+`demos/cross_alignment.ipynb` applies the selection rule: a Pareto front of `comm` against κ_bal and gene r. It also has an interactive viewer of the loops: hover a start tile, and path 1 lights up orange, path 2 blue.
+
+```bash
+python bench/scripts/cross_align.py prepare --seeds 0,1 --jobs 4          # CPU: ortholog features per rung
+python bench/scripts/cross_align.py sweep --seed 0 --part 0/4             # GPU, one part per server, resumable
+python bench/scripts/cross_align.py final --runs <from the notebook> --seeds 0,1 --view-temporal <run>,expr_g1_e0.01
+```
+
+**Results** go to `<root>/diag/cross/n<max_obs>/<temporal folder>-x<hash>/`:
+- `runs/seed<s>/<setting>.csv`: one row per rung (κ_bal, gene r, mass kept).
+- `comm/seed<s>/<setting>.csv`: one row per loop × direction × temporal run.
+- `couplings/` as top-k.
+- `final/`:
+  - dense couplings, `runs_seed<s>.csv` and `comm_seed<s>.csv`
+  - `tiles/`: per-tile `comm` and organ flows
+  - `view/`: the viewer files
+
+**New cache:** `cache/features/crossloop_<h>__<m>/`, built from the ortholog counts of the section caches.
+
 ## Output
 
 The root (`--root`, `$MGW_BENCH_DIR`, or `<MGW data dir>/bench`) holds `cache/`, `results/` and `reports/`.
